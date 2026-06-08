@@ -188,165 +188,293 @@ extension StatusItemController {
         }
     }
 
-    func populateMenu(_ menu: NSMenu, provider: UsageProvider?) {
-        let populateStartedAt = CACurrentMediaTime()
-        defer {
-            self.logMenuOperationDurationIfSlow(
-                "populateMenu",
-                startedAt: populateStartedAt,
-                menu: menu,
-                provider: provider)
-        }
 
+    // MARK: Native Snapshot Menu
+
+    private func populateNativeSnapshotMenu(_ menu: NSMenu) {
+        self.performMenuMutationWithoutAnimation {
+            menu.removeAllItems()
+
+            let title = NSMenuItem(title: "CodexBar", action: nil, keyEquivalent: "")
+            title.isEnabled = false
+            menu.addItem(title)
+            menu.addItem(.separator())
+
+            self.appendNativeProviderSnapshotItems(to: menu)
+
+            menu.addItem(.separator())
+
+            // --- Native submenus (no NSHostingView) ---
+            self.appendNativeProviderSubmenu(to: menu)
+            self.appendNativeCodexAccountSubmenu(to: menu)
+            self.appendNativeTokenAccountSubmenu(to: menu)
+
+            menu.addItem(.separator())
+
+            let refresh = NSMenuItem(title: "Refresh", action: #selector(self.refreshNow), keyEquivalent: "r")
+            refresh.target = self
+            menu.addItem(refresh)
+
+            let settings = NSMenuItem(title: "Settings\u{2026}", action: #selector(self.showSettingsGeneral), keyEquivalent: ",")
+            settings.target = self
+            menu.addItem(settings)
+
+            let quit = NSMenuItem(title: "Quit CodexBar", action: #selector(self.quit), keyEquivalent: "q")
+            quit.target = self
+            menu.addItem(quit)
+        }
+    }
+
+    private func appendNativeProviderSubmenu(to menu: NSMenu) {
         let enabledProviders = self.store.enabledProvidersForDisplay()
-        let includesOverview = self.includesOverviewTab(enabledProviders: enabledProviders)
-        let switcherSelection = self.shouldMergeIcons && enabledProviders.count > 1
-            ? self.resolvedSwitcherSelection(
-                enabledProviders: enabledProviders,
-                includesOverview: includesOverview)
-            : nil
-        let isOverviewSelected = switcherSelection == .overview
-        let selectedProvider = if isOverviewSelected {
-            self.resolvedMenuProvider(enabledProviders: enabledProviders)
+        guard enabledProviders.count > 1 else { return }
+
+        let currentProvider = self.resolvedMenuProvider() ?? .codex
+
+        let providerMenuItem = NSMenuItem(title: "Provider", action: nil, keyEquivalent: "")
+        let providerSubmenu = NSMenu(title: "Provider")
+        providerMenuItem.submenu = providerSubmenu
+
+        for provider in enabledProviders {
+            let item = NSMenuItem(
+                title: ProviderDescriptorRegistry.descriptor(for: provider).metadata.displayName,
+                action: #selector(self.selectNativeProvider(_:)),
+                keyEquivalent: "")
+            item.target = self
+            item.representedObject = provider.rawValue
+            item.state = provider == currentProvider ? .on : .off
+            providerSubmenu.addItem(item)
+        }
+
+        menu.addItem(providerMenuItem)
+    }
+
+    private func appendNativeCodexAccountSubmenu(to menu: NSMenu) {
+        guard let display = self.codexAccountMenuDisplay(for: .codex) else { return }
+
+        let accountMenuItem = NSMenuItem(title: "Codex Account", action: nil, keyEquivalent: "")
+        let accountSubmenu = NSMenu(title: "Codex Account")
+        accountMenuItem.submenu = accountSubmenu
+
+        let activeID = display.activeVisibleAccountID
+        let hasLive = display.accounts.contains(where: { $0.isLive })
+
+        for account in display.accounts {
+            let isDisplayed = account.id == activeID
+            let isLiveSystem = account.isLive
+            let displayedMarker = isDisplayed ? "\u{2713} " : "  "
+            let liveMarker = isLiveSystem ? "\u{25CF} " : "  "
+            let title = "\(displayedMarker)\(liveMarker)\(account.menuDisplayName)"
+
+            let item = NSMenuItem(
+                title: title,
+                action: #selector(self.selectNativeCodexAccount(_:)),
+                keyEquivalent: "")
+            item.target = self
+            item.representedObject = account
+            item.state = isDisplayed ? .on : .off
+            accountSubmenu.addItem(item)
+        }
+
+        accountSubmenu.addItem(.separator())
+
+        // Legend
+        let legendDisplayed = NSMenuItem(title: "\u{2713} Displayed usage account", action: nil, keyEquivalent: "")
+        legendDisplayed.isEnabled = false
+        accountSubmenu.addItem(legendDisplayed)
+
+        if hasLive {
+            let legendLive = NSMenuItem(title: "\u{25CF} Active Codex CLI account", action: nil, keyEquivalent: "")
+            legendLive.isEnabled = false
+            accountSubmenu.addItem(legendLive)
         } else {
-            switcherSelection?.provider ?? provider
-        }
-        let currentProvider = selectedProvider ?? enabledProviders.first ?? .codex
-        let rawCodexAccountDisplay = isOverviewSelected ? nil : self.codexAccountMenuDisplay(for: currentProvider)
-        let codexAccountDisplay = isOverviewSelected
-            ? nil
-            : self.stableCodexAccountMenuDisplay(
-                rawCodexAccountDisplay,
-                menu: menu,
-                provider: currentProvider)
-        let tokenAccountDisplay = isOverviewSelected ? nil : self.tokenAccountMenuDisplay(for: currentProvider)
-        let showAllAccounts = (tokenAccountDisplay?.showAll ?? false) || (codexAccountDisplay?.showAll ?? false)
-        let openAIContext = self.openAIWebContext(
-            currentProvider: currentProvider,
-            showAllAccounts: showAllAccounts)
-        let descriptor = MenuDescriptor.build(
-            provider: selectedProvider,
-            store: self.store,
-            settings: self.settings,
-            account: self.account,
-            managedCodexAccountCoordinator: self.managedCodexAccountCoordinator,
-            codexAccountPromotionCoordinator: self.codexAccountPromotionCoordinator,
-            updateReady: self.updater.updateStatus.isUpdateReady,
-            includeContextualActions: !isOverviewSelected)
-        let menuWidth = self.menuCardWidth(for: enabledProviders, sections: descriptor.sections)
-
-        let hasTokenSwitcher = menu.items.contains { $0.view is TokenAccountSwitcherView }
-        let hasCodexSwitcher = menu.items.contains { $0.view is CodexAccountSwitcherView }
-        let switcherProvidersMatch = enabledProviders == self.lastSwitcherProviders
-        let switcherUsageBarsShowUsedMatch = self.settings.usageBarsShowUsed == self.lastSwitcherUsageBarsShowUsed
-        let switcherSelectionMatches = switcherSelection == self.lastMergedSwitcherSelection
-        let switcherOverviewAvailabilityMatches = includesOverview == self.lastSwitcherIncludesOverview
-        let menuLocalizationMatches = self.menuLocalizationSignature() == self.lastMenuLocalizationSignature
-        let tokenSwitcherCompatible = tokenAccountDisplay == self.lastTokenAccountMenuDisplay &&
-            ((tokenAccountDisplay?.showSwitcher == true && hasTokenSwitcher) ||
-                (tokenAccountDisplay?.showSwitcher != true && !hasTokenSwitcher))
-        let codexSwitcherCompatible = codexAccountDisplay == self.lastCodexAccountMenuDisplay &&
-            ((codexAccountDisplay?.showSwitcher == true && hasCodexSwitcher) ||
-                (codexAccountDisplay?.showSwitcher != true && !hasCodexSwitcher))
-        let reusableRowWidthsMatch = self.reusableFixedWidthRows(in: menu).allSatisfy { item in
-            guard let view = item.view else { return false }
-            return abs(view.frame.width - menuWidth) <= 0.5
-        }
-        let providerSwitcherWidthMatches = (menu.items.first?.view as? ProviderSwitcherView).map { view in
-            abs(view.frame.width - menuWidth) <= 0.5
-        } ?? false
-        let canSmartUpdate = self.shouldMergeIcons &&
-            enabledProviders.count > 1 &&
-            !isOverviewSelected &&
-            switcherProvidersMatch &&
-            switcherUsageBarsShowUsedMatch &&
-            switcherSelectionMatches &&
-            switcherOverviewAvailabilityMatches &&
-            menuLocalizationMatches &&
-            tokenSwitcherCompatible &&
-            codexSwitcherCompatible &&
-            reusableRowWidthsMatch &&
-            !menu.items.isEmpty &&
-            menu.items.first?.view is ProviderSwitcherView
-
-        #if DEBUG
-        if self.openMenus[ObjectIdentifier(menu)] != nil {
-            self.menuLogger.debug(
-                "populateMenu(open): provider=\(String(describing: provider)) " +
-                    "display=\(enabledProviders.map(\.rawValue)) " +
-                    "available=\(self.store.enabledProviders().map(\.rawValue)) " +
-                    "selection=\(String(describing: switcherSelection)) " +
-                    "last=\(String(describing: self.lastMergedSwitcherSelection)) " +
-                    "smart=\(canSmartUpdate)")
-        }
-        #endif
-
-        if canSmartUpdate {
-            self.updateMenuContentPreservingSwitcher(
-                menu,
-                context: MenuUpdateContext(
-                    provider: selectedProvider,
-                    currentProvider: currentProvider,
-                    switcherSelection: switcherSelection ?? .provider(currentProvider),
-                    menuWidth: menuWidth,
-                    codexAccountDisplay: codexAccountDisplay,
-                    tokenAccountDisplay: tokenAccountDisplay,
-                    openAIContext: openAIContext,
-                    descriptor: descriptor))
-            return
+            let legendUnknown = NSMenuItem(title: "Codex CLI Active Account: Unknown", action: nil, keyEquivalent: "")
+            legendUnknown.isEnabled = false
+            accountSubmenu.addItem(legendUnknown)
         }
 
-        let canPreserveProviderSwitcher = self.shouldMergeIcons &&
-            enabledProviders.count > 1 &&
-            switcherProvidersMatch &&
-            switcherUsageBarsShowUsedMatch &&
-            switcherOverviewAvailabilityMatches &&
-            menuLocalizationMatches &&
-            providerSwitcherWidthMatches &&
-            !menu.items.isEmpty &&
-            menu.items.first?.view is ProviderSwitcherView
+        accountSubmenu.addItem(.separator())
 
-        #if DEBUG
-        if self.openMenus[ObjectIdentifier(menu)] != nil {
-            self.menuLogger.debug(
-                "populateMenu(open): preserveSwitcher=\(canPreserveProviderSwitcher) " +
-                    "widthMatch=\(providerSwitcherWidthMatches)")
-        }
-        #endif
-
-        if canPreserveProviderSwitcher {
-            self.updateMenuContentPreservingSwitcher(
-                menu,
-                context: MenuUpdateContext(
-                    provider: selectedProvider,
-                    currentProvider: currentProvider,
-                    switcherSelection: switcherSelection ?? .provider(currentProvider),
-                    menuWidth: menuWidth,
-                    codexAccountDisplay: codexAccountDisplay,
-                    tokenAccountDisplay: tokenAccountDisplay,
-                    openAIContext: openAIContext,
-                    descriptor: descriptor))
-            return
+        if let activeAccount = display.accounts.first(where: { $0.id == activeID }),
+           let managedAccountID = activeAccount.storedAccountID {
+            let activate = NSMenuItem(
+                title: "Activate Selected Account for Codex CLI\u{2026}",
+                action: #selector(self.requestCodexSystemPromotionFromMenu(_:)),
+                keyEquivalent: "")
+            activate.target = self
+            activate.representedObject = managedAccountID.uuidString
+            accountSubmenu.addItem(activate)
         }
 
-        #if DEBUG
-        if self.openMenus[ObjectIdentifier(menu)] != nil, menu.items.first?.view is ProviderSwitcherView {
-            self.menuLogger.debug("populateMenu(open): rebuilding whole menu and replacing provider switcher")
+        let addAccount = NSMenuItem(
+            title: "Add Account\u{2026}",
+            action: #selector(self.addManagedCodexAccountFromMenu(_:)),
+            keyEquivalent: "")
+        addAccount.target = self
+        accountSubmenu.addItem(addAccount)
+
+        menu.addItem(accountMenuItem)
+    }
+
+    private func appendNativeTokenAccountSubmenu(to menu: NSMenu) {
+        // Check which enabled provider has token accounts
+        let enabledProviders = self.store.enabledProvidersForDisplay()
+        let providersWithTokens = enabledProviders.filter {
+            TokenAccountSupportCatalog.support(for: $0) != nil
         }
-        #endif
-        self.rebuildMenuContent(
-            menu,
-            context: MenuRebuildContext(
-                enabledProviders: enabledProviders,
-                includesOverview: includesOverview,
-                switcherSelection: switcherSelection,
-                currentProvider: currentProvider,
-                selectedProvider: selectedProvider,
-                menuWidth: menuWidth,
-                codexAccountDisplay: codexAccountDisplay,
-                tokenAccountDisplay: tokenAccountDisplay,
-                openAIContext: openAIContext,
-                descriptor: descriptor))
+        guard !providersWithTokens.isEmpty else { return }
+
+        for provider in providersWithTokens {
+            let accounts = self.settings.tokenAccounts(for: provider)
+            guard accounts.count > 1 else { continue }
+
+            let activeIndex = self.settings.tokenAccountsData(for: provider)?.clampedActiveIndex() ?? 0
+            let descriptor = ProviderDescriptorRegistry.descriptor(for: provider)
+
+            let tokenMenuItem = NSMenuItem(
+                title: "\(descriptor.metadata.displayName) Account",
+                action: nil,
+                keyEquivalent: "")
+            let tokenSubmenu = NSMenu(title: "\(descriptor.metadata.displayName) Account")
+            tokenMenuItem.submenu = tokenSubmenu
+
+            for (idx, account) in accounts.enumerated() {
+                let item = NSMenuItem(
+                    title: account.displayName,
+                    action: #selector(self.selectNativeTokenAccount(_:)),
+                    keyEquivalent: "")
+                item.target = self
+                item.representedObject = NativeTokenAccountSelector(provider: provider, index: idx)
+                item.state = idx == activeIndex ? .on : .off
+                tokenSubmenu.addItem(item)
+            }
+
+            menu.addItem(tokenMenuItem)
+        }
+    }
+
+    // MARK: Native submenu action wrappers
+
+    @objc private func selectNativeProvider(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let provider = UsageProvider(rawValue: rawValue)
+        else { return }
+
+        self.settings.mergedMenuLastSelectedWasOverview = false
+        self.selectedMenuProvider = provider
+        self.lastMenuProvider = provider
+        self.lastMergedSwitcherSelection = .provider(provider)
+
+        if let menu = sender.menu {
+            self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: provider)
+        }
+    }
+
+    @objc private func selectNativeCodexAccount(_ sender: NSMenuItem) {
+        guard let account = sender.representedObject as? CodexVisibleAccount else { return }
+        _ = self.handleCodexVisibleAccountSelection(account, menu: sender.menu)
+    }
+
+    @objc private func selectNativeTokenAccount(_ sender: NSMenuItem) {
+        guard let selector = sender.representedObject as? NativeTokenAccountSelector else { return }
+        let provider = selector.provider
+        let index = selector.index
+
+        self.settings.setActiveTokenAccountIndex(index, for: provider)
+        self.applyIcon(phase: nil)
+
+        let menu = sender.menu
+        if let menu {
+            self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: provider)
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await ProviderInteractionContext.$current.withValue(.userInitiated) {
+                await self.store.refreshProvider(provider)
+            }
+            if let menu {
+                self.refreshOpenMenuIfStillVisible(menu, provider: provider)
+            }
+        }
+    }
+
+    private final class NativeTokenAccountSelector {
+        let provider: UsageProvider
+        let index: Int
+        init(provider: UsageProvider, index: Int) {
+            self.provider = provider
+            self.index = index
+        }
+    }
+
+    private func appendNativeProviderSnapshotItems(to menu: NSMenu) {
+        let enabledProviders = self.store.enabledProvidersForDisplay()
+
+        for provider in enabledProviders {
+            guard let model = self.menuCardModel(for: provider) else { continue }
+
+            // Provider header
+            let header = NSMenuItem(
+                title: model.providerName,
+                action: nil,
+                keyEquivalent: "")
+            header.isEnabled = false
+            header.attributedTitle = NSAttributedString(
+                string: model.providerName,
+                attributes: [.font: NSFont.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)])
+            menu.addItem(header)
+
+            // Account
+            if !model.email.isEmpty {
+                let account = NSMenuItem(
+                    title: "  Account: \(model.email)",
+                    action: nil,
+                    keyEquivalent: "")
+                account.isEnabled = false
+                menu.addItem(account)
+            }
+
+            // Plan
+            if let plan = model.planText, !plan.isEmpty {
+                let planItem = NSMenuItem(
+                    title: "  Plan: \(plan)",
+                    action: nil,
+                    keyEquivalent: "")
+                planItem.isEnabled = false
+                menu.addItem(planItem)
+            }
+
+            // Usage metrics (session, weekly, monthly)
+            for metric in model.metrics {
+                var parts: [String] = []
+                parts.append(metric.title)
+                parts.append(metric.percentLabel)
+                if let statusText = metric.statusText, !statusText.isEmpty {
+                    parts.append("\u{00B7}")
+                    parts.append(statusText)
+                }
+                if let resetText = metric.resetText, !resetText.isEmpty {
+                    parts.append("\u{00B7}")
+                    parts.append(resetText)
+                }
+                let metricItem = NSMenuItem(
+                    title: "  " + parts.joined(separator: " "),
+                    action: nil,
+                    keyEquivalent: "")
+                metricItem.isEnabled = false
+                menu.addItem(metricItem)
+            }
+
+            // Separator between providers
+            if provider != enabledProviders.last {
+                menu.addItem(.separator())
+            }
+        }
+    }
+
+    func populateMenu(_ menu: NSMenu, provider: UsageProvider?) {
+        self.populateNativeSnapshotMenu(menu)
     }
 
     private func reusableFixedWidthRows(in menu: NSMenu) -> [NSMenuItem] {

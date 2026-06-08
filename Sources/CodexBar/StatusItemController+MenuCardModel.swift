@@ -40,8 +40,8 @@ extension StatusItemController {
         let creditsError: String?
         let dashboard: OpenAIDashboardSnapshot?
         let dashboardError: String?
-        let tokenSnapshot: CostUsageTokenSnapshot?
-        let tokenError: String?
+        var tokenSnapshot: CostUsageTokenSnapshot?
+        var tokenError: String?
         if let codexProjection {
             credits = codexProjection.credits?.snapshot
             creditsError = codexProjection.credits?.userFacingError
@@ -71,6 +71,7 @@ extension StatusItemController {
             tokenSnapshot = projectedTokenSnapshot
             tokenError = nil
         }
+
 
         let sourceLabel = snapshotOverride == nil ? self.store.sourceLabel(for: target) : nil
         let kiloAutoMode = target == .kilo && self.settings.kiloUsageDataSource == .auto

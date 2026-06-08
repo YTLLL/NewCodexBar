@@ -133,8 +133,9 @@ final class MenuCardItemHostingView<Content: View>: NSHostingView<Content>, Menu
     }
 
     func setHighlighted(_ highlighted: Bool) {
-        guard self.highlightState.isHighlighted != highlighted else { return }
-        self.highlightState.isHighlighted = highlighted
+        // NOTICE: SwiftUI highlight-state propagation disabled.
+        // TODO: re-evaluate after native menu shell is fully stable.
+        _ = highlighted
     }
 }
 

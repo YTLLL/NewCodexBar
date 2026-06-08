@@ -567,9 +567,11 @@ struct InlineUsageDashboardContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             self.kpis
-            MiniUsageBars(model: self.model)
-                .frame(height: 58)
-                .accessibilityLabel(self.model.accessibilityLabel)
+            if !PanelRenderingMode.useLightweightHomepage {
+                MiniUsageBars(model: self.model)
+                    .frame(height: 58)
+                    .accessibilityLabel(self.model.accessibilityLabel)
+            }
             self.detailLines
         }
         .frame(maxWidth: .infinity, alignment: .leading)

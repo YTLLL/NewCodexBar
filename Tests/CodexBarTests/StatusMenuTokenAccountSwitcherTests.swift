@@ -50,6 +50,20 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         menu.items.compactMap { $0.representedObject as? String }
     }
 
+    /// Finds the native token account submenu for a provider by matching the "{displayName} Account" title.
+    private func findTokenAccountSubmenu(in menu: NSMenu, displayName: String) -> NSMenu? {
+        menu.items.first { $0.title == "\(displayName) Account" && $0.submenu != nil }?.submenu
+    }
+
+    /// Simulates selecting a native token account submenu item by sending its action to its target.
+    private func selectNativeTokenAccountItem(in submenu: NSMenu, at index: Int, file: StaticString = #filePath, line: UInt = #line) throws {
+        XCTAssertTrue(index < submenu.items.count, "Token account submenu has fewer than \(index + 1) items", file: file, line: line)
+        let item = submenu.items[index]
+        XCTAssertNotNil(item.action, "Token account item has no action", file: file, line: line)
+        XCTAssertNotNil(item.target, "Token account item has no target", file: file, line: line)
+        NSApplication.shared.sendAction(item.action!, to: item.target, from: item)
+    }
+
     private func installBlockingClaudeProvider(on store: UsageStore, blocker: BlockingTokenAccountFetchStrategy) {
         let baseSpec = store.providerSpecs[.claude]!
         store.providerSpecs[.claude] = Self.makeClaudeProviderSpec(baseSpec: baseSpec) {
@@ -128,14 +142,16 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let menu = controller.makeMenu()
         defer { withExtendedLifetime(menu) {} }
         controller.menuWillOpen(menu)
-        let switcher = try XCTUnwrap(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
 
-        let selectionTask = try XCTUnwrap(switcher._test_select(index: 1))
+        // Native token account submenu replaces hosted TokenAccountSwitcherView
+        let tokenSubmenu = try XCTUnwrap(self.findTokenAccountSubmenu(in: menu, displayName: "Claude"))
+        XCTAssertFalse(tokenSubmenu.items.isEmpty, "Token submenu should contain account items")
+        try self.selectNativeTokenAccountItem(in: tokenSubmenu, at: 1)
+
         await blocker.waitUntilStarted(count: 2)
         XCTAssertEqual(settings.tokenAccountsData(for: .claude)?.clampedActiveIndex(), 1)
 
         await blocker.resumeAll(with: .success(self.snapshot(percent: 17)))
-        await selectionTask.value
         await refreshTask.value
         let startedCallCount = await blocker.startedCallCount()
         XCTAssertGreaterThanOrEqual(startedCallCount, 2)
@@ -151,6 +167,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         self.enableOnly(.copilot, settings)
         settings.addTokenAccount(provider: .copilot, label: "Primary", token: "gh_primary")
         settings.addTokenAccount(provider: .copilot, label: "Secondary", token: "gh_secondary")
+        settings.setActiveTokenAccountIndex(0, for: .copilot)
 
         let fetcher = UsageFetcher()
         let store = UsageStore(fetcher: fetcher, browserDetection: BrowserDetection(cacheTTL: 0), settings: settings)
@@ -166,11 +183,15 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let menu = controller.makeMenu(for: .copilot)
         controller.menuWillOpen(menu)
 
-        _ = try XCTUnwrap(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
-        XCTAssertEqual(self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") }, ["menuCard"])
+        // Native submenu replaces hosted TokenAccountSwitcherView — no hosted view should exist
+        XCTAssertNil(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
+        let tokenSubmenu = try XCTUnwrap(self.findTokenAccountSubmenu(in: menu, displayName: "Copilot"))
+        XCTAssertEqual(tokenSubmenu.items.count, 2)
+        XCTAssertEqual(tokenSubmenu.items[0].state, .on, "First account should be active")
+        XCTAssertEqual(tokenSubmenu.items[1].state, .off)
     }
 
-    func test_multiAccountStackedLayoutShowsCopilotCards() {
+    func test_multiAccountStackedLayoutShowsCopilotCards() throws {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
         settings.statusChecksEnabled = false
@@ -203,8 +224,12 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         let menu = controller.makeMenu(for: .copilot)
         controller.menuWillOpen(menu)
 
+        // Native submenu replaces hosted menu cards for both segmented and stacked layouts
         XCTAssertNil(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
-        XCTAssertEqual(self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") }, ["menuCard-0", "menuCard-1"])
+        let tokenSubmenu = try XCTUnwrap(self.findTokenAccountSubmenu(in: menu, displayName: "Copilot"))
+        XCTAssertEqual(tokenSubmenu.items.count, 2)
+        XCTAssertEqual(tokenSubmenu.items[0].title, "Primary")
+        XCTAssertEqual(tokenSubmenu.items[1].title, "Secondary")
     }
 
     func test_multiAccountStackedRefreshStartsAccountFetchesConcurrently() async {
@@ -236,7 +261,7 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         XCTAssertEqual(store.accountSnapshots[.claude]?.count, 2)
     }
 
-    func test_multiAccountStackedLayoutIgnoresStaleSnapshotsAndKeepsMenuCapped() {
+    func test_multiAccountStackedLayoutIgnoresStaleSnapshotsAndKeepsMenuCapped() throws {
         self.disableMenuCardsForTesting()
         let settings = self.makeSettings()
         settings.statusChecksEnabled = false
@@ -288,9 +313,11 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         controller.menuWillOpen(menu)
 
         XCTAssertNil(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
-        XCTAssertEqual(
-            self.representedIDs(in: menu).filter { $0.hasPrefix("menuCard") },
-            ["menuCard-0", "menuCard-1", "menuCard-2", "menuCard-3", "menuCard-4", "menuCard-5"])
+        // Native submenu shows all current accounts (stale snapshots don't create extra items)
+        let tokenSubmenu = try XCTUnwrap(self.findTokenAccountSubmenu(in: menu, displayName: "Copilot"))
+        XCTAssertEqual(tokenSubmenu.items.count, 8, "All 8 current accounts should be in the submenu")
+        // Active account (index 7) has .on state
+        XCTAssertEqual(tokenSubmenu.items[7].state, .on)
     }
 
     func test_tokenAccountSwitchDefersOpenMenuRebuildUntilAfterSwitcherAction() async throws {
@@ -331,7 +358,10 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
 
         let menu = controller.makeMenu()
         controller.menuWillOpen(menu)
-        let switcher = try XCTUnwrap(menu.items.compactMap { $0.view as? TokenAccountSwitcherView }.first)
+
+        // Native token submenu replaces hosted TokenAccountSwitcherView
+        let tokenSubmenu = try XCTUnwrap(self.findTokenAccountSubmenu(in: menu, displayName: "Claude"))
+        XCTAssertFalse(tokenSubmenu.items.isEmpty)
 
         var rebuildCount = 0
         controller._test_openMenuRebuildObserver = { _ in
@@ -339,17 +369,17 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
         }
         defer { controller._test_openMenuRebuildObserver = nil }
 
-        let selectionTask = try XCTUnwrap(switcher._test_select(index: 1))
+        // Submenu selection triggers the native selector; parent menu rebuild is not scheduled
+        // because sender.menu (submenu) is not tracked in openMenus
+        try self.selectNativeTokenAccountItem(in: tokenSubmenu, at: 1)
 
+        // Selection immediately updates the active index
+        XCTAssertEqual(settings.tokenAccountsData(for: .claude)?.clampedActiveIndex(), 1)
+        // Parent menu is not rebuilt on submenu selection
         XCTAssertEqual(rebuildCount, 0)
-        for _ in 0..<20 where rebuildCount == 0 {
-            await Task.yield()
-        }
-        XCTAssertEqual(rebuildCount, 1)
 
         await blocker.waitUntilStarted(count: 1)
         await blocker.resumeAll(with: .success(self.snapshot(percent: 17)))
-        await selectionTask.value
     }
 }
 

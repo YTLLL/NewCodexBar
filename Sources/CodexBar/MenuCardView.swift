@@ -2,6 +2,10 @@ import AppKit
 import CodexBarCore
 import SwiftUI
 
+enum PanelRenderingMode {
+    static let useLightweightHomepage = true
+}
+
 enum UsageMenuCardLayout {
     static let horizontalPadding: CGFloat = 20
     static let headerOnlyVerticalPadding: CGFloat = 7
@@ -360,7 +364,9 @@ private struct ProviderCostContent: View {
             Text(self.section.title)
                 .font(.body)
                 .fontWeight(.medium)
-            if let percentUsed = self.section.percentUsed {
+            if !PanelRenderingMode.useLightweightHomepage,
+               let percentUsed = self.section.percentUsed
+            {
                 UsageProgressBar(
                     percent: percentUsed,
                     tint: self.progressColor,
@@ -396,6 +402,46 @@ private struct MetricRow: View {
                     .font(.footnote)
                     .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
                     .lineLimit(1)
+            } else if PanelRenderingMode.useLightweightHomepage {
+                // Lightweight: text-only, no progress bar
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(self.metric.percentLabel)
+                            .font(.footnote)
+                            .lineLimit(1)
+                        Spacer()
+                        if let rightLabel = self.metric.resetText {
+                            Text(rightLabel)
+                                .font(.footnote)
+                                .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                                .lineLimit(1)
+                        }
+                    }
+                    if self.metric.detailLeftText != nil || self.metric.detailRightText != nil {
+                        HStack(alignment: .firstTextBaseline) {
+                            if let detailLeft = self.metric.detailLeftText {
+                                Text(detailLeft)
+                                    .font(.footnote)
+                                    .foregroundStyle(MenuHighlightStyle.primary(self.isHighlighted))
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            if let detailRight = self.metric.detailRightText {
+                                Text(detailRight)
+                                    .font(.footnote)
+                                    .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if let detail = self.metric.detailText {
+                    Text(detail)
+                        .font(.footnote)
+                        .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                        .lineLimit(1)
+                }
             } else {
                 UsageProgressBar(
                     percent: self.metric.percent,
@@ -596,17 +642,21 @@ private struct CreditsBarContent: View {
                 .font(.body)
                 .fontWeight(.medium)
             if let percentLeft {
-                UsageProgressBar(
-                    percent: percentLeft,
-                    tint: self.progressColor,
-                    accessibilityLabel: L("Credits remaining"))
+                if !PanelRenderingMode.useLightweightHomepage {
+                    UsageProgressBar(
+                        percent: percentLeft,
+                        tint: self.progressColor,
+                        accessibilityLabel: L("Credits remaining"))
+                }
                 HStack(alignment: .firstTextBaseline) {
                     Text(self.creditsText)
                         .font(.caption)
                     Spacer()
-                    Text(self.scaleText)
-                        .font(.caption)
-                        .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                    if !PanelRenderingMode.useLightweightHomepage {
+                        Text(self.scaleText)
+                            .font(.caption)
+                            .foregroundStyle(MenuHighlightStyle.secondary(self.isHighlighted))
+                    }
                 }
             } else {
                 Text(self.creditsText)
