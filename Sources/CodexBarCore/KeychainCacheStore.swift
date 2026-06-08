@@ -27,7 +27,7 @@ public enum KeychainCacheStore {
     }
 
     private static let log = CodexBarLog.logger(LogCategories.keychainCache)
-    private static let cacheService = "com.steipete.codexbar.cache"
+    private static let cacheService = KeychainServiceNamespace.currentCache
     private static let cacheLabel = "CodexBar Cache"
     private nonisolated(unsafe) static var globalServiceOverride: String?
     @TaskLocal private static var serviceOverride: String?
@@ -58,9 +58,36 @@ public enum KeychainCacheStore {
         }
         guard self.canUseRealKeychain else { return .missing }
         #if os(macOS)
+        // Read current namespace first.
+        let currentResult = Self.readFromKeychain(key: key, service: self.serviceName, as: type)
+        if case .found = currentResult {
+            return currentResult
+        }
+
+        // Fall back to legacy namespace.
+        let legacyResult = Self.readFromKeychain(
+            key: key, service: KeychainServiceNamespace.legacyCache, as: type)
+        guard case .found(let entry) = legacyResult else {
+            return currentResult
+        }
+
+        // Migrate legacy entry to current namespace.
+        Self.store(key: key, entry: entry)
+        return legacyResult
+        #else
+        return .missing
+        #endif
+    }
+
+    #if os(macOS)
+    private static func readFromKeychain<Entry: Codable>(
+        key: Key,
+        service: String,
+        as type: Entry.Type) -> LoadResult<Entry>
+    {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: self.serviceName,
+            kSecAttrService as String: service,
             kSecAttrAccount as String: key.account,
             kSecMatchLimit as String: kSecMatchLimitOne,
             kSecReturnData as String: true,
@@ -84,10 +111,8 @@ public enum KeychainCacheStore {
         default:
             return self.loadResultForKeychainReadFailure(status: status, key: key)
         }
-        #else
-        return .missing
-        #endif
     }
+    #endif
 
     public static func store(key: Key, entry: some Codable) {
         if self.storeInTestStore(key: key, entry: entry) {

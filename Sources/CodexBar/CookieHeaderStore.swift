@@ -24,7 +24,7 @@ enum CookieHeaderStoreError: LocalizedError {
 struct KeychainCookieHeaderStore: CookieHeaderStoring {
     private static let log = CodexBarLog.logger(LogCategories.cookieHeaderStore)
 
-    private let service = "com.steipete.CodexBar"
+    private let service = KeychainServiceNamespace.current
     private let account: String
     private let promptKind: KeychainPromptContext.Kind
 
@@ -60,15 +60,6 @@ struct KeychainCookieHeaderStore: CookieHeaderStoring {
             return cached.value
         }
         Self.cacheLock.unlock()
-        var result: CFTypeRef?
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: self.service,
-            kSecAttrAccount as String: self.account,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecReturnData as String: true,
-        ]
-
         if case .interactionRequired = KeychainAccessPreflight
             .checkGenericPassword(service: self.service, account: self.account)
         {
@@ -78,21 +69,12 @@ struct KeychainCookieHeaderStore: CookieHeaderStoring {
                 account: self.account))
         }
 
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound {
+        guard let data = try KeychainServiceNamespace.readWithLegacyFallback(account: self.account).data else {
             // Cache the nil result
             Self.cacheLock.lock()
             Self.cache[self.account] = CachedValue(value: nil, timestamp: Date())
             Self.cacheLock.unlock()
             return nil
-        }
-        guard status == errSecSuccess else {
-            Self.log.error("Keychain read failed: \(status)")
-            throw CookieHeaderStoreError.keychainStatus(status)
-        }
-
-        guard let data = result as? Data else {
-            throw CookieHeaderStoreError.invalidData
         }
         let header = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalValue = (header?.isEmpty == false) ? header : nil

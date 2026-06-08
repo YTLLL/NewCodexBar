@@ -19,16 +19,32 @@ enum KeychainMigration {
     }
 
     static let itemsToMigrate: [MigrationItem] = [
-        MigrationItem(service: "com.steipete.CodexBar", account: "codex-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "claude-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "cursor-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "factory-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "minimax-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "minimax-api-token"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "augment-cookie"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "copilot-api-token"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "zai-api-token"),
-        MigrationItem(service: "com.steipete.CodexBar", account: "synthetic-api-key"),
+        // Current namespace
+        MigrationItem(service: KeychainServiceNamespace.current, account: "codex-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "claude-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "cursor-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "factory-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "minimax-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "minimax-api-token"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "augment-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "copilot-api-token"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "zai-api-token"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "synthetic-api-key"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "kimi-auth-token"),
+        MigrationItem(service: KeychainServiceNamespace.current, account: "kimi-k2-api-token"),
+        // Legacy namespace (for upgrades from original CodexBar)
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "codex-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "claude-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "cursor-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "factory-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "minimax-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "minimax-api-token"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "augment-cookie"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "copilot-api-token"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "zai-api-token"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "synthetic-api-key"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "kimi-auth-token"),
+        MigrationItem(service: KeychainServiceNamespace.legacy, account: "kimi-k2-api-token"),
     ]
 
     /// Run migration once per installation

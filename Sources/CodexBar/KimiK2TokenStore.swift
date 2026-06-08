@@ -24,7 +24,7 @@ enum KimiK2TokenStoreError: LocalizedError {
 struct KeychainKimiK2TokenStore: KimiK2TokenStoring {
     private static let log = CodexBarLog.logger(LogCategories.kimiK2TokenStore)
 
-    private let service = "com.steipete.CodexBar"
+    private let service = KeychainServiceNamespace.current
     private let account = "kimi-k2-api-token"
 
     func loadToken() throws -> String? {
@@ -32,15 +32,6 @@ struct KeychainKimiK2TokenStore: KimiK2TokenStoring {
             Self.log.debug("Keychain access disabled; skipping token load")
             return nil
         }
-        var result: CFTypeRef?
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: self.service,
-            kSecAttrAccount as String: self.account,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecReturnData as String: true,
-        ]
-
         if case .interactionRequired = KeychainAccessPreflight
             .checkGenericPassword(service: self.service, account: self.account)
         {
@@ -50,17 +41,8 @@ struct KeychainKimiK2TokenStore: KimiK2TokenStoring {
                 account: self.account))
         }
 
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound {
+        guard let data = try KeychainServiceNamespace.readWithLegacyFallback(account: self.account).data else {
             return nil
-        }
-        guard status == errSecSuccess else {
-            Self.log.error("Keychain read failed: \(status)")
-            throw KimiK2TokenStoreError.keychainStatus(status)
-        }
-
-        guard let data = result as? Data else {
-            throw KimiK2TokenStoreError.invalidData
         }
         let token = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let token, !token.isEmpty {

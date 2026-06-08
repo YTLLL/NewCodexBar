@@ -6,13 +6,14 @@ import Security
 public enum AppGroupSupport {
     public static let defaultTeamID = "Y5PE65HELJ"
     public static let teamIDInfoKey = "CodexBarTeamID"
+    public static let currentBaseID = "com.ytlll.newcodexbar"
+    public static let legacyBaseID = "com.steipete.codexbar"
     public static let legacyReleaseGroupID = "group.com.steipete.codexbar"
     public static let legacyDebugGroupID = "group.com.steipete.codexbar.debug"
     public static let widgetSnapshotFilename = "widget-snapshot.json"
     public static let migrationVersion = 1
     public static let migrationVersionKey = "appGroupMigrationVersion"
     private static let sharedDefaultsMigrationKeys = [
-        "debugDisableKeychainAccess",
         "widgetSelectedProvider",
     ]
 
@@ -40,7 +41,7 @@ public enum AppGroupSupport {
     }
 
     static func currentGroupID(teamID: String, bundleID: String?) -> String {
-        let base = "\(teamID).com.steipete.codexbar"
+        let base = "\(teamID).\(Self.currentBaseID)"
         return self.isDebugBundleID(bundleID) ? "\(base).debug" : base
     }
 
@@ -67,6 +68,11 @@ public enum AppGroupSupport {
 
     public static func legacyGroupID(for bundleID: String? = Bundle.main.bundleIdentifier) -> String {
         self.isDebugBundleID(bundleID) ? self.legacyDebugGroupID : self.legacyReleaseGroupID
+    }
+
+    static func legacyTeamPrefixedGroupID(teamID: String, bundleID: String?) -> String {
+        let base = "\(teamID).\(Self.legacyBaseID)"
+        return self.isDebugBundleID(bundleID) ? "\(base).debug" : base
     }
 
     public static func sharedDefaults(
@@ -127,6 +133,20 @@ public enum AppGroupSupport {
             .appendingPathComponent(self.legacyGroupID(for: bundleID), isDirectory: true)
     }
 
+    static func legacyTeamPrefixedSnapshotURL(
+        teamID: String,
+        bundleID: String?,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser)
+        -> URL?
+    {
+        let containerURL = homeDirectory
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Group Containers", isDirectory: true)
+            .appendingPathComponent(self.legacyTeamPrefixedGroupID(teamID: teamID, bundleID: bundleID), isDirectory: true)
+        guard FileManager.default.fileExists(atPath: containerURL.path) else { return nil }
+        return containerURL.appendingPathComponent(self.widgetSnapshotFilename, isDirectory: false)
+    }
+
     public static func migrateLegacyDataIfNeeded(
         bundleID: String? = Bundle.main.bundleIdentifier,
         standardDefaults: UserDefaults = .standard,
@@ -149,18 +169,27 @@ public enum AppGroupSupport {
             return MigrationResult(status: .targetUnavailable)
         }
 
-        let legacyDefaults = legacyDefaultsOverride ?? UserDefaults(suiteName: self.legacyGroupID(for: bundleID))
+        let resolvedTeamID = self.resolvedTeamID()
+        let legacyDefaults = legacyDefaultsOverride
+            ?? UserDefaults(suiteName: self.legacyTeamPrefixedGroupID(teamID: resolvedTeamID, bundleID: bundleID))
+            ?? UserDefaults(suiteName: self.legacyGroupID(for: bundleID))
+
         let currentSnapshotURL = currentSnapshotURLOverride
             ?? self.currentContainerURL(bundleID: bundleID, fileManager: fileManager)?
             .appendingPathComponent(self.widgetSnapshotFilename, isDirectory: false)
+
         let legacySnapshotURL = legacySnapshotURLOverride
+            ?? self.legacyTeamPrefixedSnapshotURL(
+                teamID: resolvedTeamID, bundleID: bundleID, homeDirectory: homeDirectory)
             ?? self.legacyContainerCandidateURL(bundleID: bundleID, homeDirectory: homeDirectory)
             .appendingPathComponent(self.widgetSnapshotFilename, isDirectory: false)
 
         let copiedSnapshot = {
             guard let currentSnapshotURL else { return false }
+            // Try team-prefixed legacy container first, then group-prefixed.
+            let legacyCandidate = legacySnapshotURL
             guard !fileManager.fileExists(atPath: currentSnapshotURL.path),
-                  fileManager.fileExists(atPath: legacySnapshotURL.path)
+                  fileManager.fileExists(atPath: legacyCandidate.path)
             else {
                 return false
             }
@@ -168,7 +197,7 @@ public enum AppGroupSupport {
                 try fileManager.createDirectory(
                     at: currentSnapshotURL.deletingLastPathComponent(),
                     withIntermediateDirectories: true)
-                try fileManager.copyItem(at: legacySnapshotURL, to: currentSnapshotURL)
+                try fileManager.copyItem(at: legacyCandidate, to: currentSnapshotURL)
                 return true
             } catch {
                 return false

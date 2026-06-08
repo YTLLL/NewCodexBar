@@ -24,7 +24,7 @@ enum ZaiTokenStoreError: LocalizedError {
 struct KeychainZaiTokenStore: ZaiTokenStoring {
     private static let log = CodexBarLog.logger(LogCategories.zaiTokenStore)
 
-    private let service = "com.steipete.CodexBar"
+    private let service = KeychainServiceNamespace.current
     private let account = "zai-api-token"
 
     // Cache to reduce keychain access frequency
@@ -49,15 +49,6 @@ struct KeychainZaiTokenStore: ZaiTokenStoring {
             return cached
         }
         Self.cacheLock.unlock()
-        var result: CFTypeRef?
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: self.service,
-            kSecAttrAccount as String: self.account,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecReturnData as String: true,
-        ]
-
         if case .interactionRequired = KeychainAccessPreflight
             .checkGenericPassword(service: self.service, account: self.account)
         {
@@ -67,22 +58,13 @@ struct KeychainZaiTokenStore: ZaiTokenStoring {
                 account: self.account))
         }
 
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound {
+        guard let data = try KeychainServiceNamespace.readWithLegacyFallback(account: self.account).data else {
             // Cache the nil result
             Self.cacheLock.lock()
             Self.cachedToken = nil
             Self.cacheTimestamp = Date()
             Self.cacheLock.unlock()
             return nil
-        }
-        guard status == errSecSuccess else {
-            Self.log.error("Keychain read failed: \(status)")
-            throw ZaiTokenStoreError.keychainStatus(status)
-        }
-
-        guard let data = result as? Data else {
-            throw ZaiTokenStoreError.invalidData
         }
         let token = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalValue = (token?.isEmpty == false) ? token : nil

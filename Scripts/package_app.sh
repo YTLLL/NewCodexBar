@@ -123,23 +123,19 @@ if [[ -f "$ICON_SOURCE" ]]; then
   iconutil --convert icns --output "$ICON_TARGET" "$ICON_SOURCE"
 fi
 
-BUNDLE_ID="com.steipete.codexbar"
-FEED_URL="https://raw.githubusercontent.com/steipete/CodexBar/main/appcast.xml"
-AUTO_CHECKS=true
+BUNDLE_ID="com.ytlll.newcodexbar"
+FEED_URL=""
+AUTO_CHECKS=false
 if [[ "$LOWER_CONF" == "debug" ]]; then
-  BUNDLE_ID="com.steipete.codexbar.debug"
-  FEED_URL=""
-  AUTO_CHECKS=false
-fi
-if [[ "$SIGNING_MODE" == "adhoc" ]]; then
-  FEED_URL=""
-  AUTO_CHECKS=false
+  BUNDLE_ID="com.ytlll.newcodexbar.debug"
 fi
 WIDGET_BUNDLE_ID="${BUNDLE_ID}.widget"
 APP_TEAM_ID="${APP_TEAM_ID:-Y5PE65HELJ}"
-APP_GROUP_ID="${APP_TEAM_ID}.com.steipete.codexbar"
+APP_GROUP_LEGACY="${APP_TEAM_ID}.com.steipete.codexbar"
+APP_GROUP_CURRENT="${APP_TEAM_ID}.com.ytlll.newcodexbar"
 if [[ "$BUNDLE_ID" == *".debug"* ]]; then
-  APP_GROUP_ID="${APP_TEAM_ID}.com.steipete.codexbar.debug"
+  APP_GROUP_LEGACY="${APP_TEAM_ID}.com.steipete.codexbar.debug"
+  APP_GROUP_CURRENT="${APP_TEAM_ID}.com.ytlll.newcodexbar.debug"
 fi
 ENTITLEMENTS_DIR="$ROOT/.build/entitlements"
 APP_ENTITLEMENTS="${ENTITLEMENTS_DIR}/CodexBar.entitlements"
@@ -156,7 +152,8 @@ cat > "$APP_ENTITLEMENTS" <<PLIST
 <dict>
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>${APP_GROUP_ID}</string>
+        <string>${APP_GROUP_CURRENT}</string>
+        <string>${APP_GROUP_LEGACY}</string>
     </array>
     $(if [[ "$ALLOW_LLDB" == "1" ]]; then echo "    <key>com.apple.security.get-task-allow</key><true/>"; fi)
 </dict>
@@ -171,7 +168,8 @@ cat > "$WIDGET_ENTITLEMENTS" <<PLIST
     <true/>
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>${APP_GROUP_ID}</string>
+        <string>${APP_GROUP_CURRENT}</string>
+        <string>${APP_GROUP_LEGACY}</string>
     </array>
 </dict>
 </plist>
@@ -198,6 +196,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>SUFeedURL</key><string>${FEED_URL}</string>
     <key>SUPublicEDKey</key><string>AGCY8w5vHirVfGGDGc8Szc5iuOqupZSh9pMj/Qs67XI=</string>
     <key>SUEnableAutomaticChecks</key><${AUTO_CHECKS}/>
+    <key>SUAutomaticallyUpdate</key><false/>
+    <key>SUAllowsAutomaticUpdates</key><false/>
     <key>CodexBuildTimestamp</key><string>${BUILD_TIMESTAMP}</string>
     <key>CodexGitCommit</key><string>${GIT_COMMIT}</string>
     <key>CodexBarTeamID</key><string>${APP_TEAM_ID}</string>

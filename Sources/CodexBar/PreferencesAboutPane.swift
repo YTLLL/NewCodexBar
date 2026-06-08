@@ -5,7 +5,7 @@ import SwiftUI
 struct AboutPane: View {
     let updater: UpdaterProviding
     @State private var iconHover = false
-    @AppStorage("autoUpdateEnabled") private var autoUpdateEnabled: Bool = true
+    @AppStorage("autoUpdateEnabled") private var autoUpdateEnabled: Bool = false
     @AppStorage(UpdateChannel.userDefaultsKey)
     private var updateChannelRaw: String = UpdateChannel.defaultChannel.rawValue
     @State private var didLoadUpdaterState = false
@@ -67,10 +67,7 @@ struct AboutPane: View {
                 AboutLinkRow(
                     icon: "chevron.left.slash.chevron.right",
                     title: L("link_github"),
-                    url: "https://github.com/steipete/CodexBar")
-                AboutLinkRow(icon: "globe", title: L("link_website"), url: "https://steipete.me")
-                AboutLinkRow(icon: "bird", title: L("link_twitter"), url: "https://twitter.com/steipete")
-                AboutLinkRow(icon: "envelope", title: L("link_email"), url: "mailto:peter@steipete.me")
+                    url: "https://github.com/YTLLL/NewCodexBar")
             }
             .padding(.top, 8)
             .frame(maxWidth: .infinity)
@@ -102,7 +99,6 @@ struct AboutPane: View {
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: 280)
                     }
-                    Button(L("check_for_updates")) { self.updater.checkForUpdates(nil) }
                 }
             } else {
                 Text(self.updater.unavailableReason ?? L("updates_unavailable"))
@@ -147,7 +143,7 @@ struct AboutPane: View {
     }
 
     private func openProjectHome() {
-        guard let url = URL(string: "https://github.com/steipete/CodexBar") else { return }
+        guard let url = URL(string: "https://github.com/YTLLL/NewCodexBar") else { return }
         NSWorkspace.shared.open(url)
     }
 }

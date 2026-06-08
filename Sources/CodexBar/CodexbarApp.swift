@@ -17,11 +17,13 @@ struct CodexBarApp: App {
     private let account: AccountInfo
 
     init() {
+        Self.migrateUserDefaultsIfNeeded()
+
         let env = ProcessInfo.processInfo.environment
         let storedLevel = CodexBarLog.parseLevel(UserDefaults.standard.string(forKey: "debugLogLevel")) ?? .verbose
         let level = CodexBarLog.parseLevel(env["CODEXBAR_LOG_LEVEL"]) ?? storedLevel
         CodexBarLog.bootstrapIfNeeded(.init(
-            destination: .oslog(subsystem: "com.steipete.codexbar"),
+            destination: .oslog(subsystem: "com.ytlll.newcodexbar"),
             level: level,
             json: false))
 
@@ -114,6 +116,75 @@ struct CodexBarApp: App {
             UserDefaults.standard.set([language], forKey: "AppleLanguages")
         }
     }
+
+    private static func migrateUserDefaultsIfNeeded() {
+        let migrationKey = "UserDefaultsMigrationV1Completed"
+        guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
+
+        let legacyDomain = "com.steipete.codexbar"
+        guard let legacyDefaults = UserDefaults(suiteName: legacyDomain) else { return }
+
+        let defaults = UserDefaults.standard
+
+        for key in Self.migratableUserDefaultsKeys {
+            guard defaults.object(forKey: key) == nil else { continue }
+            guard let value = legacyDefaults.object(forKey: key) else { continue }
+            defaults.set(value, forKey: key)
+        }
+
+        defaults.set(true, forKey: migrationKey)
+    }
+
+    private static let migratableUserDefaultsKeys: Set<String> = [
+        // Provider / menu display
+        "selectedMenuProvider",
+        "mergedOverviewSelectedProviders",
+        "mergedMenuLastSelectedWasOverview",
+        // Menu bar appearance
+        "menuBarShowsBrandIconWithPercent",
+        "menuBarDisplayMode",
+        "kiroMenuBarDisplayMode",
+        "mergeIcons",
+        "switcherShowsIcons",
+        "menuBarShowsHighestUsage",
+        "menuBarMetricPreferences",
+        "multiAccountMenuLayout",
+        // Usage display
+        "usageBarsShowUsed",
+        "tokenCostUsageEnabled",
+        "tokenCostUsageHistoryDays",
+        "resetTimesShowAbsolute",
+        "showOptionalCreditsAndExtraUsage",
+        "hidePersonalInfo",
+        // Refresh & status
+        "refreshFrequency",
+        "statusChecksEnabled",
+        // Notifications
+        "sessionQuotaNotificationsEnabled",
+        "quotaWarningNotificationsEnabled",
+        "quotaWarningSessionEnabled",
+        "quotaWarningWeeklyEnabled",
+        "quotaWarningSoundEnabled",
+        "quotaWarningMarkersVisible",
+        "quotaWarningThresholds",
+        "quotaWarningSessionThresholds",
+        "quotaWarningWeeklyThresholds",
+        "weeklyProgressWorkDays",
+        // Feature toggles
+        "openAIWebAccessEnabled",
+        "openAIWebBatterySaverEnabled",
+        "claudeWebExtrasEnabled",
+        "randomBlinkEnabled",
+        "confettiOnWeeklyLimitResetsEnabled",
+        "providerChangelogLinksEnabled",
+        "providerStorageFootprintsEnabled",
+        "historicalTrackingEnabled",
+        // Other
+        "launchAtLogin",
+        "appLanguage",
+        "updateChannel",
+        "jetbrainsIDEBasePath",
+    ]
 }
 
 // MARK: - Updater abstraction
@@ -317,7 +388,7 @@ private func makeUpdaterController() -> UpdaterProviding {
 
     if InstallOrigin.isHomebrewCask(appBundleURL: bundleURL) {
         return DisabledUpdaterController(
-            unavailableReason: "Updates managed by Homebrew. Run: brew upgrade --cask steipete/tap/codexbar")
+            unavailableReason: "Updates managed by Homebrew.")
     }
 
     guard isDeveloperIDSigned(bundleURL: bundleURL) else {
@@ -327,7 +398,7 @@ private func makeUpdaterController() -> UpdaterProviding {
     let defaults = UserDefaults.standard
     let autoUpdateKey = "autoUpdateEnabled"
     // Default to true for first launch; fall back to saved preference thereafter.
-    let savedAutoUpdate = (defaults.object(forKey: autoUpdateKey) as? Bool) ?? true
+    let savedAutoUpdate = (defaults.object(forKey: autoUpdateKey) as? Bool) ?? false
     return SparkleUpdaterController(savedAutoUpdate: savedAutoUpdate)
 }
 #else

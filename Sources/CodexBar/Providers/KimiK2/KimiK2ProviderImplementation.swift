@@ -29,7 +29,7 @@ struct KimiK2ProviderImplementation: ProviderImplementation {
                         style: .link,
                         isVisible: nil,
                         perform: {
-                            if let url = URL(string: "https://github.com/steipete/CodexBar/blob/main/docs/kimi-k2.md") {
+                            if let url = URL(string: "https://github.com/YTLLL/NewCodexBar/blob/main/docs/kimi-k2.md") {
                                 NSWorkspace.shared.open(url)
                             }
                         }),
