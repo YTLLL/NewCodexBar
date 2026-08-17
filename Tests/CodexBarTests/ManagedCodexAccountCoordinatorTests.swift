@@ -66,6 +66,32 @@ struct ManagedCodexAccountCoordinatorTests {
         #expect(coordinator.isAuthenticatingManagedAccount == false)
         #expect(coordinator.authenticatingManagedAccountID == nil)
     }
+
+    @Test
+    func `coordinator replaces an in flight add account login`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let runner = ReplacingManagedCodexLoginRunner()
+        let service = ManagedCodexAccountService(
+            store: InMemoryManagedCodexAccountStoreForCoordinatorTests(
+                accounts: ManagedCodexAccountSet(version: 1, accounts: [])),
+            homeFactory: CoordinatorTestManagedCodexHomeFactory(root: root),
+            loginRunner: runner,
+            identityReader: CoordinatorStubManagedCodexIdentityReader(email: "replacement@example.com"))
+        let coordinator = ManagedCodexAccountCoordinator(service: service)
+
+        let firstLogin = Task { try await coordinator.authenticateManagedAccount() }
+        await runner.waitUntilFirstLoginStarted()
+        let replacement = try await coordinator.authenticateManagedAccount(replacingInProgress: true)
+
+        await #expect(throws: CancellationError.self) {
+            try await firstLogin.value
+        }
+        #expect(replacement.email == "replacement@example.com")
+        #expect(await runner.invocationCount() == 2)
+        #expect(coordinator.isAuthenticatingManagedAccount == false)
+    }
 }
 
 private actor BlockingManagedCodexLoginRunner: ManagedCodexLoginRunning {
@@ -101,6 +127,34 @@ private struct TimedOutManagedCodexLoginRunner: ManagedCodexLoginRunning {
 
     func run(homePath _: String, timeout _: TimeInterval) async -> CodexLoginRunner.Result {
         self.result
+    }
+}
+
+private actor ReplacingManagedCodexLoginRunner: ManagedCodexLoginRunning {
+    private var count = 0
+    private var hasStartedFirstLogin = false
+    private var firstLoginStartedWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func run(homePath _: String, timeout _: TimeInterval) async -> CodexLoginRunner.Result {
+        self.count += 1
+        if self.count == 1 {
+            self.hasStartedFirstLogin = true
+            self.firstLoginStartedWaiters.forEach { $0.resume() }
+            self.firstLoginStartedWaiters.removeAll()
+            try? await Task.sleep(for: .seconds(30))
+        }
+        return CodexLoginRunner.Result(outcome: .success, output: "ok")
+    }
+
+    func waitUntilFirstLoginStarted() async {
+        if self.hasStartedFirstLogin { return }
+        await withCheckedContinuation { continuation in
+            self.firstLoginStartedWaiters.append(continuation)
+        }
+    }
+
+    func invocationCount() -> Int {
+        self.count
     }
 }
 

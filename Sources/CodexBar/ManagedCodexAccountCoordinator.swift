@@ -14,6 +14,8 @@ final class ManagedCodexAccountCoordinator {
     private(set) var authenticatingManagedAccountID: UUID?
     private(set) var isRemovingManagedAccount: Bool = false
     private(set) var removingManagedAccountID: UUID?
+    @ObservationIgnored private var authenticationTask: Task<ManagedCodexAccount, Error>?
+    @ObservationIgnored private var authenticationOperationID: UUID?
     var onManagedAccountsDidChange: (@MainActor () -> Void)?
 
     var hasConflictingManagedAccountOperationInFlight: Bool {
@@ -26,25 +28,46 @@ final class ManagedCodexAccountCoordinator {
 
     func authenticateManagedAccount(
         existingAccountID: UUID? = nil,
-        timeout: TimeInterval = 120)
+        timeout: TimeInterval = 120,
+        replacingInProgress: Bool = false)
         async throws -> ManagedCodexAccount
     {
-        guard self.isAuthenticatingManagedAccount == false else {
+        if self.isAuthenticatingManagedAccount, replacingInProgress == false {
+            throw ManagedCodexAccountCoordinatorError.authenticationInProgress
+        }
+        guard self.isRemovingManagedAccount == false else {
             throw ManagedCodexAccountCoordinatorError.authenticationInProgress
         }
 
-        self.isAuthenticatingManagedAccount = true
-        self.authenticatingManagedAccountID = existingAccountID
-        defer {
-            self.isAuthenticatingManagedAccount = false
-            self.authenticatingManagedAccountID = nil
+        if replacingInProgress {
+            self.authenticationTask?.cancel()
         }
 
-        let account = try await self.service.authenticateManagedAccount(
-            existingAccountID: existingAccountID,
-            timeout: timeout)
-        self.onManagedAccountsDidChange?()
-        return account
+        let operationID = UUID()
+        self.isAuthenticatingManagedAccount = true
+        self.authenticatingManagedAccountID = existingAccountID
+        self.authenticationOperationID = operationID
+
+        let authenticationTask = Task {
+            try await self.service.authenticateManagedAccount(
+                existingAccountID: existingAccountID,
+                timeout: timeout)
+        }
+        self.authenticationTask = authenticationTask
+
+        do {
+            let account = try await authenticationTask.value
+            try Task.checkCancellation()
+            guard self.authenticationOperationID == operationID else {
+                throw CancellationError()
+            }
+            self.finishAuthentication(operationID: operationID)
+            self.onManagedAccountsDidChange?()
+            return account
+        } catch {
+            self.finishAuthentication(operationID: operationID)
+            throw error
+        }
     }
 
     func removeManagedAccount(id: UUID) async throws {
@@ -57,5 +80,13 @@ final class ManagedCodexAccountCoordinator {
 
         try await self.service.removeManagedAccount(id: id)
         self.onManagedAccountsDidChange?()
+    }
+
+    private func finishAuthentication(operationID: UUID) {
+        guard self.authenticationOperationID == operationID else { return }
+        self.authenticationTask = nil
+        self.authenticationOperationID = nil
+        self.isAuthenticatingManagedAccount = false
+        self.authenticatingManagedAccountID = nil
     }
 }

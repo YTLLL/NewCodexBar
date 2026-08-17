@@ -56,7 +56,6 @@ struct CodexAccountsSectionState: Equatable {
 
     var canAddAccount: Bool {
         !self.hasUnreadableManagedAccountStore &&
-            !self.isAuthenticatingManagedAccount &&
             !self.isRemovingManagedAccount &&
             !self.isAuthenticatingLiveAccount &&
             !self.isPromotingSystemAccount
@@ -64,7 +63,7 @@ struct CodexAccountsSectionState: Equatable {
 
     var addAccountTitle: String {
         if self.isAuthenticatingManagedAccount, self.authenticatingManagedAccountID == nil {
-            return L("Adding Account…")
+            return L("Request New Login Link…")
         }
         return L("Add Account")
     }

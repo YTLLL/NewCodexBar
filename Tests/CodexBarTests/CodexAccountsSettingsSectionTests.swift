@@ -182,7 +182,7 @@ struct CodexAccountsSettingsSectionTests {
     }
 
     @Test
-    func `codex accounts section disables add and reauth while managed authentication is in flight`() async throws {
+    func `codex accounts section allows replacing managed login while disabling reauth`() async throws {
         let settings = Self.makeSettingsStore(suite: "CodexAccountsSettingsSectionTests-in-flight")
         let store = Self.makeUsageStore(settings: settings)
         let managedStoreURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -221,8 +221,8 @@ struct CodexAccountsSettingsSectionTests {
         let state = try #require(pane._test_codexAccountsSectionState())
         let visibleAccount = try #require(state.visibleAccounts.first { $0.email == "managed@example.com" })
 
-        #expect(state.canAddAccount == false)
-        #expect(state.addAccountTitle == "Adding Account…")
+        #expect(state.canAddAccount)
+        #expect(state.addAccountTitle == "Request New Login Link…")
         #expect(state.canReauthenticate(visibleAccount) == false)
 
         await runner.resume()

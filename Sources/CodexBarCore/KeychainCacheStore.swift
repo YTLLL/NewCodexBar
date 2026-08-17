@@ -67,7 +67,7 @@ public enum KeychainCacheStore {
         // Fall back to legacy namespace.
         let legacyResult = Self.readFromKeychain(
             key: key, service: KeychainServiceNamespace.legacyCache, as: type)
-        guard case .found(let entry) = legacyResult else {
+        guard case let .found(entry) = legacyResult else {
             return currentResult
         }
 

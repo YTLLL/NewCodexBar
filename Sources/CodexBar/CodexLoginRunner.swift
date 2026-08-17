@@ -6,6 +6,7 @@ struct CodexLoginRunner {
     struct Result: Equatable {
         enum Outcome: Equatable {
             case success
+            case cancelled
             case timedOut
             case failed(status: Int32)
             case missingBinary
@@ -22,7 +23,7 @@ struct CodexLoginRunner {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         loginPATH: [String]? = LoginShellPathCache.shared.current) async -> Result
     {
-        await Task(priority: .userInitiated) {
+        let task = Task.detached(priority: .userInitiated) {
             var env = environment
             env["PATH"] = PathBuilder.effectivePATH(
                 purposes: [.rpc, .tty, .nodeTooling],
@@ -49,7 +50,7 @@ struct CodexLoginRunner {
 
             let termination = ProcessTermination()
             process.terminationHandler = { _ in
-                termination.resolve(timedOut: false)
+                termination.resolve(.exited)
             }
 
             var processGroup: pid_t?
@@ -60,14 +61,28 @@ struct CodexLoginRunner {
                 return Result(outcome: .launchFailed(error.localizedDescription), output: "")
             }
 
-            let timedOut = await self.wait(timeout: timeout, termination: termination)
-            if timedOut {
-                self.terminate(process, processGroup: processGroup)
+            let processSession = ProcessSession(process: process, processGroup: processGroup)
+            let resolution = await withTaskCancellationHandler {
+                await self.wait(timeout: timeout, termination: termination)
+            } onCancel: {
+                termination.resolve(.cancelled)
+            }
+
+            switch resolution {
+            case .exited:
+                break
+            case .cancelled, .timedOut:
+                processSession.terminate()
             }
 
             let output = await self.combinedOutput(stdout: stdout, stderr: stderr)
-            if timedOut {
+            switch resolution {
+            case .cancelled:
+                return Result(outcome: .cancelled, output: output)
+            case .timedOut:
                 return Result(outcome: .timedOut, output: output)
+            case .exited:
+                break
             }
 
             let status = process.terminationStatus
@@ -75,55 +90,92 @@ struct CodexLoginRunner {
                 return Result(outcome: .success, output: output)
             }
             return Result(outcome: .failed(status: status), output: output)
-        }.value
+        }
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private final class ProcessTermination: @unchecked Sendable {
-        private let lock = NSLock()
-        private var timedOut: Bool?
-        private var continuation: CheckedContinuation<Bool, Never>?
+        enum Resolution {
+            case exited
+            case cancelled
+            case timedOut
+        }
 
-        func resolve(timedOut: Bool) {
-            let continuation: CheckedContinuation<Bool, Never>?
+        private let lock = NSLock()
+        private var resolution: Resolution?
+        private var continuation: CheckedContinuation<Resolution, Never>?
+
+        func resolve(_ resolution: Resolution) {
+            let continuation: CheckedContinuation<Resolution, Never>?
             self.lock.lock()
-            guard self.timedOut == nil else {
+            guard self.resolution == nil else {
                 self.lock.unlock()
                 return
             }
-            self.timedOut = timedOut
+            self.resolution = resolution
             continuation = self.continuation
             self.continuation = nil
             self.lock.unlock()
-            continuation?.resume(returning: timedOut)
+            continuation?.resume(returning: resolution)
         }
 
-        func wait() async -> Bool {
+        func wait() async -> Resolution {
             await withCheckedContinuation { continuation in
-                let timedOut: Bool?
+                let resolution: Resolution?
                 self.lock.lock()
-                timedOut = self.timedOut
-                if timedOut == nil {
+                resolution = self.resolution
+                if resolution == nil {
                     self.continuation = continuation
                 }
                 self.lock.unlock()
 
-                if let timedOut {
-                    continuation.resume(returning: timedOut)
+                if let resolution {
+                    continuation.resume(returning: resolution)
                 }
             }
         }
     }
 
-    private static func wait(timeout: TimeInterval, termination: ProcessTermination) async -> Bool {
+    private final class ProcessSession: @unchecked Sendable {
+        private let process: Process
+        private let processGroup: pid_t?
+        private let lock = NSLock()
+        private var didTerminate = false
+
+        init(process: Process, processGroup: pid_t?) {
+            self.process = process
+            self.processGroup = processGroup
+        }
+
+        func terminate() {
+            self.lock.lock()
+            guard self.didTerminate == false else {
+                self.lock.unlock()
+                return
+            }
+            self.didTerminate = true
+            self.lock.unlock()
+            CodexLoginRunner.terminate(self.process, processGroup: self.processGroup)
+        }
+    }
+
+    private static func wait(
+        timeout: TimeInterval,
+        termination: ProcessTermination) async -> ProcessTermination.Resolution
+    {
         let timeoutTask = Task.detached(priority: .userInitiated) {
             try? await Task.sleep(nanoseconds: self.timeoutNanoseconds(timeout))
             if Task.isCancelled == false {
-                termination.resolve(timedOut: true)
+                termination.resolve(.timedOut)
             }
         }
-        let timedOut = await termination.wait()
+        let resolution = await termination.wait()
         timeoutTask.cancel()
-        return timedOut
+        return resolution
     }
 
     private static func timeoutNanoseconds(_ timeout: TimeInterval) -> UInt64 {

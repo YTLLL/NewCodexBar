@@ -56,8 +56,17 @@ final class StatusMenuTokenAccountSwitcherTests: XCTestCase {
     }
 
     /// Simulates selecting a native token account submenu item by sending its action to its target.
-    private func selectNativeTokenAccountItem(in submenu: NSMenu, at index: Int, file: StaticString = #filePath, line: UInt = #line) throws {
-        XCTAssertTrue(index < submenu.items.count, "Token account submenu has fewer than \(index + 1) items", file: file, line: line)
+    private func selectNativeTokenAccountItem(
+        in submenu: NSMenu,
+        at index: Int,
+        file: StaticString = #filePath,
+        line: UInt = #line) throws
+    {
+        XCTAssertTrue(
+            index < submenu.items.count,
+            "Token account submenu has fewer than \(index + 1) items",
+            file: file,
+            line: line)
         let item = submenu.items[index]
         XCTAssertNotNil(item.action, "Token account item has no action", file: file, line: line)
         XCTAssertNotNil(item.target, "Token account item has no target", file: file, line: line)

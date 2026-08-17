@@ -247,6 +247,10 @@ final class ManagedCodexAccountService {
 
         do {
             let result = await self.loginRunner.run(homePath: homeURL.path, timeout: timeout)
+            try Task.checkCancellation()
+            if case .cancelled = result.outcome {
+                throw CancellationError()
+            }
             guard case .success = result.outcome else { throw ManagedCodexAccountServiceError.loginFailed(result) }
 
             let identity = try self.identityReader.loadAccountIdentity(homePath: homeURL.path)

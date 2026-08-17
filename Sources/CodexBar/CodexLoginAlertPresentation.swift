@@ -8,7 +8,7 @@ struct CodexLoginAlertInfo: Equatable {
 enum CodexLoginAlertPresentation {
     static func alertInfo(for result: CodexLoginRunner.Result) -> CodexLoginAlertInfo? {
         switch result.outcome {
-        case .success:
+        case .success, .cancelled:
             return nil
         case .missingBinary:
             return CodexLoginAlertInfo(

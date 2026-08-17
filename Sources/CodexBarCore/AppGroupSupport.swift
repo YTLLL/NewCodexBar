@@ -142,7 +142,9 @@ public enum AppGroupSupport {
         let containerURL = homeDirectory
             .appendingPathComponent("Library", isDirectory: true)
             .appendingPathComponent("Group Containers", isDirectory: true)
-            .appendingPathComponent(self.legacyTeamPrefixedGroupID(teamID: teamID, bundleID: bundleID), isDirectory: true)
+            .appendingPathComponent(
+                self.legacyTeamPrefixedGroupID(teamID: teamID, bundleID: bundleID),
+                isDirectory: true)
         guard FileManager.default.fileExists(atPath: containerURL.path) else { return nil }
         return containerURL.appendingPathComponent(self.widgetSnapshotFilename, isDirectory: false)
     }

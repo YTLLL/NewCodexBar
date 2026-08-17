@@ -194,7 +194,10 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
     }
 
     @objc func addManagedCodexAccountFromMenu(_: NSMenuItem) {
-        guard self.codexAccountPromotionCoordinator.isInteractionBlocked() == false else {
+        guard self.codexAccountPromotionCoordinator.isPromotingSystemAccount == false,
+              self.codexAccountPromotionCoordinator.isAuthenticatingLiveAccount == false,
+              self.managedCodexAccountCoordinator.isRemovingManagedAccount == false
+        else {
             self.loginLogger.info("Add Account tap ignored: Codex account change already in-flight")
             return
         }
@@ -210,8 +213,61 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let account = try await self.managedCodexAccountCoordinator.authenticateManagedAccount()
+                let account = try await self.managedCodexAccountCoordinator.authenticateManagedAccount(
+                    replacingInProgress: true)
                 self.settings.selectAuthenticatedManagedCodexAccount(account)
+                await ProviderInteractionContext.$current.withValue(.userInitiated) {
+                    await self.store.refreshCodexAccountScopedState(allowDisabled: true)
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                self.presentManagedCodexAccountError(error)
+            }
+        }
+    }
+
+    @objc func removeManagedCodexAccountFromMenu(_: NSMenuItem) {
+        guard self.codexAccountPromotionCoordinator.isInteractionBlocked() == false else {
+            self.loginLogger.info("Remove Account tap ignored: Codex account change already in-flight")
+            return
+        }
+        guard self.settings.hasUnreadableManagedCodexAccountStore == false else {
+            self.presentLoginAlert(
+                title: L("Managed Codex accounts unavailable"),
+                message: L("CodexBar could not read managed account storage."))
+            return
+        }
+
+        let accounts = self.removableManagedCodexAccounts()
+        guard accounts.isEmpty == false else { return }
+
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 320, height: 26), pullsDown: false)
+        for account in accounts {
+            popup.addItem(withTitle: account.displayName)
+            popup.lastItem?.representedObject = account.storedAccountID?.uuidString
+        }
+
+        let alert = NSAlert()
+        alert.messageText = L("Remove Codex Account")
+        alert.informativeText = L("Choose the account to remove from CodexBar.")
+        alert.alertStyle = .warning
+        alert.accessoryView = popup
+        alert.addButton(withTitle: L("Remove"))
+        alert.addButton(withTitle: L("Cancel"))
+        alert.buttons.first?.hasDestructiveAction = true
+
+        guard alert.runModal() == .alertFirstButtonReturn,
+              let rawAccountID = popup.selectedItem?.representedObject as? String,
+              let accountID = UUID(uuidString: rawAccountID)
+        else {
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.managedCodexAccountCoordinator.removeManagedAccount(id: accountID)
                 await ProviderInteractionContext.$current.withValue(.userInitiated) {
                     await self.store.refreshCodexAccountScopedState(allowDisabled: true)
                 }
@@ -219,6 +275,10 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
                 self.presentManagedCodexAccountError(error)
             }
         }
+    }
+
+    func removableManagedCodexAccounts() -> [CodexVisibleAccount] {
+        self.settings.codexVisibleAccountProjection.visibleAccounts.filter { $0.storedAccountID != nil }
     }
 
     @objc func requestCodexSystemPromotionFromMenu(_ sender: NSMenuItem) {
@@ -262,6 +322,10 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
 
     @objc func showSettingsGeneral() {
         self.openSettings(tab: .general)
+    }
+
+    @objc func showSettingsGeneralFromMenu(_ sender: NSMenuItem) {
+        self.performPersistentMenuAction(.settings, in: sender.menu)
     }
 
     @objc func showSettingsAbout() {
@@ -320,10 +384,16 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
         DispatchQueue.main.async {
             self.preferencesSelection.tab = tab
             NSApp.activate(ignoringOtherApps: true)
-            NotificationCenter.default.post(
-                name: .codexbarOpenSettings,
-                object: nil,
-                userInfo: ["tab": tab.rawValue])
+            let didOpenSettings = NSApp.sendAction(
+                Selector(("showPreferencesWindow:")),
+                to: nil,
+                from: nil)
+            if didOpenSettings == false {
+                NotificationCenter.default.post(
+                    name: .codexbarOpenSettings,
+                    object: nil,
+                    userInfo: ["tab": tab.rawValue])
+            }
         }
     }
 
@@ -436,6 +506,7 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
     func describe(_ outcome: CodexLoginRunner.Result.Outcome) -> String {
         switch outcome {
         case .success: "success"
+        case .cancelled: "cancelled"
         case .timedOut: "timedOut"
         case let .failed(status): "failed(status: \(status))"
         case .missingBinary: "missingBinary"

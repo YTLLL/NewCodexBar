@@ -18,8 +18,8 @@ public enum KeychainServiceNamespace {
         guard let legacyData = try read(service: legacy, account: account) else {
             return (nil, false)
         }
-        try write(data: legacyData, service: current, account: account)
-        log.debug("Migrated \(account) from legacy to current namespace")
+        try self.write(data: legacyData, service: self.current, account: account)
+        self.log.debug("Migrated \(account) from legacy to current namespace")
         return (legacyData, true)
     }
 
@@ -56,7 +56,9 @@ public enum KeychainServiceNamespace {
             throw KeychainNamespaceError.writeFailed(updateStatus)
         }
         var addQuery = query
-        for (key, value) in attributes { addQuery[key] = value }
+        for (key, value) in attributes {
+            addQuery[key] = value
+        }
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
             throw KeychainNamespaceError.writeFailed(addStatus)

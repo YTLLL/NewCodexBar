@@ -286,9 +286,12 @@ struct ProvidersPane: View {
         }
 
         do {
-            let account = try await self.managedCodexAccountCoordinator.authenticateManagedAccount()
+            let account = try await self.managedCodexAccountCoordinator.authenticateManagedAccount(
+                replacingInProgress: true)
             self.selectCodexVisibleAccountForAuthenticatedManagedAccount(account)
             await self.refreshCodexProvider()
+        } catch is CancellationError {
+            return
         } catch {
             self.codexAccountsNotice = self.codexAccountsNotice(for: error)
         }
