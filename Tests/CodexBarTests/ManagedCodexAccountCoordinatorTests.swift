@@ -7,6 +7,27 @@ import Testing
 @MainActor
 struct ManagedCodexAccountCoordinatorTests {
     @Test
+    func `add account login link remains valid for ten minutes by default`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let loginResult = CodexLoginRunner.Result(outcome: .timedOut, output: "timed out")
+        let runner = TimeoutRecordingManagedCodexLoginRunner(result: loginResult)
+        let service = ManagedCodexAccountService(
+            store: InMemoryManagedCodexAccountStoreForCoordinatorTests(
+                accounts: ManagedCodexAccountSet(version: 1, accounts: [])),
+            homeFactory: CoordinatorTestManagedCodexHomeFactory(root: root),
+            loginRunner: runner,
+            identityReader: CoordinatorStubManagedCodexIdentityReader(email: "user@example.com"))
+        let coordinator = ManagedCodexAccountCoordinator(service: service)
+
+        await #expect(throws: ManagedCodexAccountServiceError.self) {
+            try await coordinator.authenticateManagedAccount()
+        }
+        #expect(await runner.recordedTimeout() == 10 * 60)
+    }
+
+    @Test
     func `coordinator exposes in flight state and rejects overlapping managed authentication`() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -127,6 +148,24 @@ private struct TimedOutManagedCodexLoginRunner: ManagedCodexLoginRunning {
 
     func run(homePath _: String, timeout _: TimeInterval) async -> CodexLoginRunner.Result {
         self.result
+    }
+}
+
+private actor TimeoutRecordingManagedCodexLoginRunner: ManagedCodexLoginRunning {
+    let result: CodexLoginRunner.Result
+    private var timeout: TimeInterval?
+
+    init(result: CodexLoginRunner.Result) {
+        self.result = result
+    }
+
+    func run(homePath _: String, timeout: TimeInterval) async -> CodexLoginRunner.Result {
+        self.timeout = timeout
+        return self.result
+    }
+
+    func recordedTimeout() -> TimeInterval? {
+        self.timeout
     }
 }
 

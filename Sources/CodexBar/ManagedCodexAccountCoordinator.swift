@@ -28,7 +28,7 @@ final class ManagedCodexAccountCoordinator {
 
     func authenticateManagedAccount(
         existingAccountID: UUID? = nil,
-        timeout: TimeInterval = 120,
+        timeout: TimeInterval = ManagedCodexAccountService.defaultLoginLinkValidity,
         replacingInProgress: Bool = false)
         async throws -> ManagedCodexAccount
     {

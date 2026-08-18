@@ -197,6 +197,8 @@ struct CodexWorkspaceAlertSelector: ManagedCodexWorkspaceSelecting {
 
 @MainActor
 final class ManagedCodexAccountService {
+    static let defaultLoginLinkValidity: TimeInterval = 10 * 60
+
     private let store: any ManagedCodexAccountStoring
     private let homeFactory: any ManagedCodexHomeProducing
     private let loginRunner: any ManagedCodexLoginRunning
@@ -236,7 +238,7 @@ final class ManagedCodexAccountService {
 
     func authenticateManagedAccount(
         existingAccountID: UUID? = nil,
-        timeout: TimeInterval = 120)
+        timeout: TimeInterval = ManagedCodexAccountService.defaultLoginLinkValidity)
         async throws -> ManagedCodexAccount
     {
         let snapshot = try self.store.loadAccounts()
