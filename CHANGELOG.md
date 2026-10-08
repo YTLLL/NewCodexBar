@@ -8,6 +8,7 @@
 
 ### Fixed
 - Codex: let the menu remove a selected managed account, reliably open Settings, and replace an in-progress Add Account login with a fresh OAuth link.
+- Codex: route new CLI and resume sessions through the selected account's managed `CODEX_HOME` while keeping existing sessions on their original home.
 - Claude: remove transient ClaudeProbe session artifacts after CLI usage polls so background refreshes no longer fill Claude Code project history with CodexBar `/usage` sessions (#1301). Thanks @LPFchan and @matthewod11-stack!
 - Menu bar: keep z.ai overview rows with detail submenus in Overview so hovering quota details no longer recurses into a nested provider menu (#1279, fixes #1246). Thanks @RajvardhanPatil07!
 - Codex: backfill visible-account reset timestamps and missing 5-hour/weekly window metadata from same-workspace plan history so segmented multi-account JSON keeps machine-readable reset data (#1283). Thanks @callmepopo!

@@ -101,6 +101,22 @@ extension CodexBarCLI {
         """
     }
 
+    static func codexHomeHelp(version: String) -> String {
+        """
+        CodexBar \(version)
+
+        Usage:
+          codexbar codex-home
+
+        Description:
+          Print the CODEX_HOME that a new Codex CLI process should use for the
+          account currently selected in CodexBar.
+
+          The value is resolved when the command runs. Existing Codex processes
+          are not restarted or moved and keep their original environment.
+        """
+    }
+
     static func configHelp(version: String) -> String {
         """
         CodexBar \(version)
@@ -212,6 +228,7 @@ extension CodexBarCLI {
           codexbar serve [--port <port>] [--refresh-interval <seconds>]
                        [--request-timeout <seconds>]
                        [--json-output] [--log-level <trace|verbose|debug|info|warning|error|critical>] [-v|--verbose]
+          codexbar codex-home
           codexbar config <validate|dump|providers> [--format text|json]
                                         [--json]
                                         [--json-only]
@@ -239,6 +256,7 @@ extension CodexBarCLI {
           codexbar --provider gemini
           codexbar cost --provider claude --format json --pretty
           codexbar serve --port 8080
+          codexbar codex-home
           codexbar config validate --format json --pretty
           codexbar config enable --provider grok
           codexbar config set-api-key --provider elevenlabs --stdin

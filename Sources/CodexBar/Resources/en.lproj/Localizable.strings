@@ -520,7 +520,7 @@
 "open_menu_shortcut_title" = "Open menu";
 "open_menu_shortcut_subtitle" = "Trigger the menu bar menu from anywhere.";
 "install_cli" = "Install CLI";
-"install_cli_subtitle" = "Symlink CodexBarCLI to /usr/local/bin and /opt/homebrew/bin as codexbar.";
+"install_cli_subtitle" = "Symlink CodexBarCLI as codexbar and route new Codex commands through the selected account home.";
 "cli_not_found" = "CodexBarCLI not found in app bundle.";
 "no_writable_bin_dirs" = "No writable bin dirs found.";
 "show_debug_settings_title" = "Show Debug Settings";

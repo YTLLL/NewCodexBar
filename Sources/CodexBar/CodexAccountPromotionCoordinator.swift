@@ -49,6 +49,7 @@ final class CodexAccountPromotionCoordinator {
 
         do {
             let result = try await self.service.promoteManagedAccount(id: managedAccountID)
+            _ = CodexCLIShellIntegrationInstaller.installFromCurrentApp()
             return .success(result)
         } catch {
             let mapped = Self.mapUserFacingError(error)

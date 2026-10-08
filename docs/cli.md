@@ -12,8 +12,8 @@ A lightweight Commander-based CLI that mirrors the menu bar app’s provider fet
 Use it when you need usage numbers in scripts, CI, or dashboards without UI.
 
 ## Install
-- In the app: **Preferences → Advanced → Install CLI**. This symlinks `CodexBarCLI` to `/usr/local/bin/codexbar` and `/opt/homebrew/bin/codexbar`.
-- From the repo, after installing `CodexBar.app` in `/Applications`: `./bin/install-codexbar-cli.sh` (same symlink targets).
+- In the app: **Preferences → Advanced → Install CLI**. This symlinks `CodexBarCLI` to `/usr/local/bin/codexbar` and `/opt/homebrew/bin/codexbar`, and installs the shell routing that applies the selected Codex account to new `codex` commands.
+- From the repo, after installing `CodexBar.app` in `/Applications`: `./bin/install-codexbar-cli.sh` (same symlink targets and shell routing).
 - Manual: `ln -sf "/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI" /usr/local/bin/codexbar`.
 
 ### Release tarball install (macOS/Linux)
@@ -86,6 +86,13 @@ See `docs/configuration.md` for the schema.
   - `--format text|json`, `--pretty`, and `--json-only` are supported.
   - Warnings keep exit code 0; errors exit non-zero.
 - `codexbar config dump` prints the normalized config JSON.
+- `codexbar codex-home` prints the `CODEX_HOME` selected for a new Codex CLI process.
+
+### Codex CLI account routing
+
+After the CLI install step, interactive `codex` commands are routed through the account selected in CodexBar. The wrapper sets `CODEX_HOME` at launch and adds `--no-daemon` unless it was already supplied, so `codex resume` starts in the selected account's home without reusing an older shared daemon. For compatibility with older CLI syntax, routed `codex --resume` is rewritten to `codex resume` before launch.
+
+This is deliberately launch-scoped: an already-running Codex session is not restarted or moved and keeps its original process environment. A resume command can only see transcripts stored under the selected home; it does not migrate or copy sessions between account homes. To bypass routing for one command, use `command codex ...` in zsh/bash.
 
 ### Token accounts
 The CLI reads multi-account tokens from `~/.codexbar/config.json` (same file as the app).

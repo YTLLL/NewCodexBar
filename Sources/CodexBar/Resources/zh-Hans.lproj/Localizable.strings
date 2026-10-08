@@ -507,7 +507,7 @@
 "open_menu_shortcut_title" = "打开菜单";
 "open_menu_shortcut_subtitle" = "从任意位置触发菜单栏菜单。";
 "install_cli" = "安装 CLI";
-"install_cli_subtitle" = "将 CodexBarCLI 作为 codexbar 符号链接到 /usr/local/bin 和 /opt/homebrew/bin。";
+"install_cli_subtitle" = "将 CodexBarCLI 作为 codexbar 安装，并让新启动的 Codex 命令使用所选账户的 home。";
 "cli_not_found" = "在应用包中未找到 CodexBarCLI。";
 "no_writable_bin_dirs" = "未找到可写的 bin 目录。";
 "show_debug_settings_title" = "显示调试设置";

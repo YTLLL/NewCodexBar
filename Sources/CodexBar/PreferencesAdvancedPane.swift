@@ -1,3 +1,5 @@
+import CodexBarCore
+import Foundation
 import KeyboardShortcuts
 import SwiftUI
 
@@ -115,12 +117,19 @@ extension AdvancedPane {
             return
         }
 
+        var results: [String] = []
+        do {
+            let installedShells = try CodexCLIShellIntegrationInstaller.install(helperURL: helperURL)
+            results.append("Codex routing: \(installedShells.joined(separator: ", "))")
+        } catch {
+            results.append("Codex routing failed: \(error.localizedDescription)")
+        }
+
         let destinations = [
             "/usr/local/bin/codexbar",
             "/opt/homebrew/bin/codexbar",
         ]
 
-        var results: [String] = []
         for dest in destinations {
             let dir = (dest as NSString).deletingLastPathComponent
             guard fm.fileExists(atPath: dir) else { continue }

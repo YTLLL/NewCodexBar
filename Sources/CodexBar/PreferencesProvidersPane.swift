@@ -262,6 +262,7 @@ struct ProvidersPane: View {
     func selectCodexVisibleAccount(id: String) async {
         self.codexAccountsNotice = nil
         guard self.settings.selectCodexVisibleAccount(id: id) else { return }
+        _ = CodexCLIShellIntegrationInstaller.installFromCurrentApp()
         await self.refreshCodexProvider()
     }
 

@@ -453,6 +453,9 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
 
             let shouldRefresh = await self.runLoginFlow(provider: provider)
             if shouldRefresh {
+                if provider == .codex {
+                    _ = CodexCLIShellIntegrationInstaller.installFromCurrentApp()
+                }
                 await ProviderInteractionContext.$current.withValue(.userInitiated) {
                     await self.store.refresh()
                 }
