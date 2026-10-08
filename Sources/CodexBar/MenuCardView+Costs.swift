@@ -77,7 +77,7 @@ extension UsageMenuCardView.Model {
     static func tokenUsageHint(provider: UsageProvider) -> String? {
         switch provider {
         case .codex:
-            L("Estimated from local Codex logs for the selected account.")
+            L("This Mac: estimated from shared local Codex history, across accounts.")
         case .claude:
             UsageFormatter.costEstimateHint(provider: provider)
         case .vertexai:

@@ -520,7 +520,7 @@
 "open_menu_shortcut_title" = "Open menu";
 "open_menu_shortcut_subtitle" = "Trigger the menu bar menu from anywhere.";
 "install_cli" = "Install CLI";
-"install_cli_subtitle" = "Symlink CodexBarCLI as codexbar and route new Codex commands through the selected account home.";
+"install_cli_subtitle" = "Symlink CodexBarCLI to /usr/local/bin and /opt/homebrew/bin as codexbar.";
 "cli_not_found" = "CodexBarCLI not found in app bundle.";
 "no_writable_bin_dirs" = "No writable bin dirs found.";
 "show_debug_settings_title" = "Show Debug Settings";
@@ -1062,3 +1062,8 @@
 "Clear" = "Clear";
 "No matching providers" = "No matching providers";
 "Search providers" = "Search providers";
+"This Mac: estimated from shared local Codex history, across accounts." = "This Mac: estimated from shared local Codex history, across accounts.";
+"Account switched" = "Account switched";
+"Account switched; restart the Codex background server manually when no tasks are running." = "Account switched; restart the Codex background server manually when no tasks are running.";
+"The current environment is not the shared Codex home (~/.codex). Restart CodexBar without a custom CODEX_HOME before switching the system account." = "The current environment is not the shared Codex home (~/.codex). Restart CodexBar without a custom CODEX_HOME before switching the system account.";
+"System account switching requires native Codex file credential storage. The configured keyring, auto, or ephemeral store is not supported; use a compatible native login before switching." = "System account switching requires native Codex file credential storage. The configured keyring, auto, or ephemeral store is not supported; use a compatible native login before switching.";

@@ -29,8 +29,6 @@ extension CodexBarCLI {
             print(Self.costHelp(version: version))
         case "serve":
             print(Self.serveHelp(version: version))
-        case "codex-home":
-            print(Self.codexHomeHelp(version: version))
         case "config", "validate", "dump":
             print(Self.configHelp(version: version))
         case "cache", "clear":

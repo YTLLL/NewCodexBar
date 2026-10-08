@@ -52,12 +52,8 @@ extension UsageStore {
         guard provider == .codex else {
             return (nil, provider.rawValue)
         }
-        let homePath = self.settings.activeManagedCodexRemoteHomePath?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let homePath, !homePath.isEmpty else {
-            return (nil, "codex:ambient")
-        }
-        return (homePath, "codex:managed:\(homePath)")
+        // Local history belongs to this Mac's shared CLI home, not the displayed remote account.
+        return (nil, "codex:ambient")
     }
 
     func tokenSnapshot(

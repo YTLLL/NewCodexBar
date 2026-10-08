@@ -1110,7 +1110,6 @@ extension StatusItemController {
     func handleCodexVisibleAccountSelection(_ account: CodexVisibleAccount, menu: NSMenu?) -> Bool {
         let visibleAccountID = account.id
         self.settings.selectDisplayedCodexVisibleAccount(account)
-        _ = CodexCLIShellIntegrationInstaller.installFromCurrentApp()
         if self.store.prepareCodexAccountScopedRefreshIfNeeded(), let menu {
             self.deferSwitcherMenuRebuildIfStillVisible(menu, provider: .codex)
         }

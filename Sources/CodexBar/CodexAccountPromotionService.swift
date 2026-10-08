@@ -131,6 +131,7 @@ struct CodexAccountPromotionResult: Equatable {
     let displacedLiveDisposition: DisplacedLiveDisposition
     let didMutateLiveAuth: Bool
     let resultingActiveSource: CodexActiveSource
+    var daemonRestartNote: String?
 }
 
 enum CodexAccountPromotionError: Error, Equatable {
@@ -144,6 +145,8 @@ enum CodexAccountPromotionError: Error, Equatable {
     case displacedLiveImportFailed
     case managedStoreCommitFailed
     case liveAuthSwapFailed
+    case liveHomeNotShared
+    case liveCredentialsStoreUnsupported
 }
 
 @MainActor
@@ -159,6 +162,8 @@ final class CodexAccountPromotionService {
     private let accountScopedRefresher: any CodexAccountScopedRefreshing
     private let baseEnvironment: [String: String]
     private let fileManager: FileManager
+    private let sharedHomeURL: URL
+    private let daemon: CodexAppServerDaemon
 
     init(
         store: any ManagedCodexAccountStoring,
@@ -171,7 +176,9 @@ final class CodexAccountPromotionService {
         activeSourceWriter: any CodexActiveSourceWriting,
         accountScopedRefresher: any CodexAccountScopedRefreshing,
         baseEnvironment: [String: String] = ProcessInfo.processInfo.environment,
-        fileManager: FileManager = .default)
+        fileManager: FileManager = .default,
+        sharedHomeURL: URL? = nil,
+        daemon: CodexAppServerDaemon = CodexAppServerDaemon())
     {
         self.store = store
         self.homeFactory = homeFactory
@@ -184,6 +191,9 @@ final class CodexAccountPromotionService {
         self.accountScopedRefresher = accountScopedRefresher
         self.baseEnvironment = baseEnvironment
         self.fileManager = fileManager
+        self.sharedHomeURL = sharedHomeURL ?? fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex", isDirectory: true)
+        self.daemon = daemon
     }
 
     convenience init(
@@ -207,6 +217,7 @@ final class CodexAccountPromotionService {
     }
 
     func promoteManagedAccount(id: UUID) async throws -> CodexAccountPromotionResult {
+        try self.validateSharedLiveHome()
         let contextBuilder = PreparedPromotionContextBuilder(
             store: self.store,
             workspaceResolver: self.workspaceResolver,
@@ -242,6 +253,8 @@ final class CodexAccountPromotionService {
         }
 
         self.activeSourceWriter.writeCodexActiveSource(.liveSystem)
+        let daemonRestartNote = await self.daemon.restartIfRunning(
+            homeURL: context.live.homeURL, environment: self.baseEnvironment)
         await self.accountScopedRefresher.refreshCodexAccountScopedState(allowDisabled: true)
 
         return CodexAccountPromotionResult(
@@ -249,7 +262,34 @@ final class CodexAccountPromotionService {
             outcome: .promoted,
             displacedLiveDisposition: executionResult.displacedLiveDisposition,
             didMutateLiveAuth: true,
-            resultingActiveSource: .liveSystem)
+            resultingActiveSource: .liveSystem,
+            daemonRestartNote: daemonRestartNote)
+    }
+
+    private func validateSharedLiveHome() throws {
+        let liveHome = CodexHomeScope.ambientHomeURL(env: self.baseEnvironment, fileManager: self.fileManager)
+        guard liveHome.resolvingSymlinksInPath().standardizedFileURL ==
+            self.sharedHomeURL.resolvingSymlinksInPath().standardizedFileURL
+        else { throw CodexAccountPromotionError.liveHomeNotShared }
+
+        // This promotion publishes auth.json. Keyring/auto/ephemeral stores cannot be switched safely this way.
+        let configURL = liveHome.appendingPathComponent("config.toml")
+        guard self.fileManager.fileExists(atPath: configURL.path) else { return }
+        guard let config = try? String(contentsOf: configURL, encoding: .utf8) else {
+            throw CodexAccountPromotionError.liveAccountUnreadable
+        }
+        let keyPattern = #"^(?:cli_auth_credentials_store|"cli_auth_credentials_store"|"# +
+            #"'cli_auth_credentials_store')\s*="#
+        let filePattern = keyPattern + #"\s*(?:"file"|'file')\s*(?:#.*)?$"#
+        var foundSetting = false
+        for rawLine in config.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard line.range(of: keyPattern, options: .regularExpression) != nil else { continue }
+            guard !foundSetting, line.range(of: filePattern, options: .regularExpression) != nil else {
+                throw CodexAccountPromotionError.liveCredentialsStoreUnsupported
+            }
+            foundSetting = true
+        }
     }
 
     nonisolated static func authFileURL(for homeURL: URL) -> URL {

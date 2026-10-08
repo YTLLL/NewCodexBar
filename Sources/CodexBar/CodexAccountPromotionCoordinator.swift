@@ -14,6 +14,7 @@ final class CodexAccountPromotionCoordinator {
     private(set) var isAuthenticatingLiveAccount = false
     private(set) var isPromotingSystemAccount = false
     private(set) var userFacingError: CodexSystemAccountPromotionUserFacingError?
+    private(set) var daemonRestartNote: String?
 
     init(
         service: CodexAccountPromotionService,
@@ -37,6 +38,7 @@ final class CodexAccountPromotionCoordinator {
         async -> Result<CodexAccountPromotionResult, CodexSystemAccountPromotionUserFacingError>
     {
         self.userFacingError = nil
+        self.daemonRestartNote = nil
 
         guard !self.isInteractionBlocked() else {
             let error = Self.interactionBlockedError()
@@ -49,7 +51,7 @@ final class CodexAccountPromotionCoordinator {
 
         do {
             let result = try await self.service.promoteManagedAccount(id: managedAccountID)
-            _ = CodexCLIShellIntegrationInstaller.installFromCurrentApp()
+            self.daemonRestartNote = result.daemonRestartNote
             return .success(result)
         } catch {
             let mapped = Self.mapUserFacingError(error)
@@ -105,6 +107,15 @@ final class CodexAccountPromotionCoordinator {
                 L("CodexBar could not update managed account storage.")
             case .liveAuthSwapFailed:
                 L("CodexBar could not replace the live Codex auth on this Mac.")
+            case .liveHomeNotShared:
+                L(
+                    "The current environment is not the shared Codex home (~/.codex). " +
+                        "Restart CodexBar without a custom CODEX_HOME before switching the system account.")
+            case .liveCredentialsStoreUnsupported:
+                L(
+                    "System account switching requires native Codex file credential storage. " +
+                        "The configured keyring, auto, or ephemeral store is not supported; " +
+                        "use a compatible native login before switching.")
             }
 
             return CodexSystemAccountPromotionUserFacingError(title: title, message: message)

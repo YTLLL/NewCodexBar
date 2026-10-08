@@ -38,8 +38,6 @@ enum CodexBarCLI {
                 await self.runCost(invocation.parsedValues)
             case ["serve"]:
                 await self.runServe(invocation.parsedValues)
-            case ["codex-home"]:
-                self.runCodexHome()
             case ["config", "validate"]:
                 self.runConfigValidate(invocation.parsedValues)
             case ["config", "dump"]:
@@ -74,7 +72,6 @@ enum CodexBarCLI {
         let usageSignature = CommandSignature.describe(UsageOptions())
         let costSignature = CommandSignature.describe(CostOptions())
         let serveSignature = CommandSignature.describe(ServeOptions())
-        let codexHomeSignature = CommandSignature()
         let configSignature = CommandSignature.describe(ConfigOptions())
         let configProviderToggleSignature = CommandSignature.describe(ConfigProviderToggleOptions())
         let configSetAPIKeySignature = CommandSignature.describe(ConfigSetAPIKeyOptions())
@@ -97,11 +94,6 @@ enum CodexBarCLI {
                 abstract: "Serve usage and cost JSON over localhost HTTP",
                 discussion: nil,
                 signature: serveSignature),
-            CommandDescriptor(
-                name: "codex-home",
-                abstract: "Print the Codex home selected by CodexBar",
-                discussion: nil,
-                signature: codexHomeSignature),
             CommandDescriptor(
                 name: "config",
                 abstract: "Config utilities",

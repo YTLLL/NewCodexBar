@@ -49,7 +49,7 @@ struct UsageStoreCachedTokenHydrationTests {
     }
 
     @Test
-    func `cached codex token hydration skips managed codex homes`() async throws {
+    func `displayed managed accounts keep shared cost cache and isolated remote usage`() async throws {
         let env = try CostUsageTestEnvironment()
         defer { env.cleanup() }
 
@@ -74,7 +74,7 @@ struct UsageStoreCachedTokenHydrationTests {
         let managedAccount = ManagedCodexAccount(
             id: UUID(),
             email: "managed@example.com",
-            managedHomePath: env.codexHomeRoot.path,
+            managedHomePath: env.root.appendingPathComponent("managed-home").path,
             createdAt: 1,
             updatedAt: 1,
             lastAuthenticatedAt: 1)
@@ -91,11 +91,20 @@ struct UsageStoreCachedTokenHydrationTests {
 
         store.hydrateCachedTokenSnapshots(now: day)
 
-        for _ in 0..<20 {
+        for _ in 0..<100 where store.tokenSnapshot(for: .codex) == nil {
             try await Task.sleep(for: .milliseconds(10))
         }
 
-        #expect(store.tokenSnapshot(for: .codex) == nil)
+        #expect(store.tokenSnapshot(for: .codex)?.sessionTokens == 42)
+        #expect(store.tokenCostScope(for: .codex).codexHomePath == nil)
+        #expect(store.tokenCostScope(for: .codex).signature == "codex:ambient")
+        let remote = ProviderRegistry.makeEnvironment(
+            base: [:], provider: .codex, settings: settings, tokenOverride: nil)
+        #expect(remote["CODEX_HOME"] == managedAccount.managedHomePath)
+        settings.codexActiveSource = .liveSystem
+        #expect(store.tokenCostScope(for: .codex).codexHomePath == nil)
+        #expect(store.tokenCostScope(for: .codex).signature == "codex:ambient")
+        #expect(store.tokenSnapshot(for: .codex)?.sessionTokens == 42)
     }
 
     private static func makeCodexOnlySettings(historyDays: Int) -> SettingsStore {

@@ -7,6 +7,124 @@ import Testing
 @MainActor
 struct CodexAccountPromotionServiceTests {
     @Test
+    func `daemon failure preserves promotion and publishes a success notice once`() async throws {
+        let container = try CodexAccountPromotionTestContainer(suiteName: "CodexPromotion-daemon-failure")
+        defer { container.tearDown() }
+        let target = try container.createManagedAccount(persistedEmail: "jerr@example.com", authAccountID: "jerr")
+        try container.persistAccounts([target])
+        let oldAuth = try container.writeLiveOAuthAuthFile(email: "serena@example.com", accountID: "serena")
+        let directory = container.liveHomeURL.appendingPathComponent("app-server-daemon")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(#"{"pid":42}"#.utf8).write(to: directory.appendingPathComponent("daemon.pid"))
+        var calls: [String] = []
+        let daemon = CodexAppServerDaemon(isAppServerProcess: { $0 == 42 }, run: { command, env in
+            calls.append(command)
+            #expect(container.settings.codexActiveSource == .liveSystem)
+            #expect(try container.liveAuthData() == container.managedAuthData(for: target))
+            #expect(env["CODEX_HOME"] == container.liveHomeURL.resolvingSymlinksInPath().path)
+            if command == "restart" { throw SubprocessRunnerError.timedOut("synthetic restart") }
+            let socket = container.liveHomeURL.appendingPathComponent("app-server-control/app-server-control.sock")
+            let data = try JSONSerialization.data(withJSONObject: [
+                "status": "running", "backend": "pid", "socketPath": socket.path,
+            ])
+            return try #require(String(data: data, encoding: .utf8))
+        })
+        let coordinator = CodexAccountPromotionCoordinator(service: container.makeService(daemon: daemon))
+        let result = await coordinator.promote(managedAccountID: target.id)
+        guard case let .success(promotion) = result else {
+            Issue.record("Daemon failure must not fail promotion")
+            return
+        }
+        #expect(promotion.outcome == .promoted)
+        #expect(promotion.daemonRestartNote == CodexAppServerDaemon.recoveryNote)
+        #expect(coordinator.daemonRestartNote == promotion.daemonRestartNote)
+        #expect(coordinator.userFacingError == nil)
+        #expect(calls == ["version", "restart"])
+        #expect(try container.liveAuthData() == container.managedAuthData(for: target))
+        let preserved = try #require(container.loadAccounts().accounts.first { $0.email == "serena@example.com" })
+        #expect(try container.managedAuthData(for: preserved) == oldAuth)
+
+        let repeated = await coordinator.promote(managedAccountID: target.id)
+        guard case let .success(noOp) = repeated else { Issue.record("Expected idempotent promotion"); return }
+        #expect(noOp.outcome == .convergedNoOp)
+        #expect(coordinator.daemonRestartNote == nil)
+        #expect(calls == ["version", "restart"])
+    }
+
+    @Test(arguments: ["keyring", "auto", "ephemeral"])
+    func `non-file credential stores fail before changing auth`(mode: String) async throws {
+        let container = try CodexAccountPromotionTestContainer(suiteName: "CodexPromotion-store-\(mode)")
+        defer { container.tearDown() }
+        let target = try container.createManagedAccount(persistedEmail: "jerr@example.com", authAccountID: "jerr")
+        try container.persistAccounts([target])
+        let original = try container.writeLiveOAuthAuthFile(email: "serena@example.com", accountID: "serena")
+        try "cli_auth_credentials_store = '\(mode)' # native store\n".write(
+            to: container.liveHomeURL.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+        await #expect(throws: CodexAccountPromotionError.liveCredentialsStoreUnsupported) {
+            try await container.makeService().promoteManagedAccount(id: target.id)
+        }
+        #expect(try container.liveAuthData() == original)
+        #expect(try container.loadAccounts().accounts.count == 1)
+    }
+
+    @Test
+    func `unexpected managed ambient home is rejected without mutating either account`() async throws {
+        let container = try CodexAccountPromotionTestContainer(suiteName: "CodexPromotion-wrong-home")
+        defer { container.tearDown() }
+        let target = try container.createManagedAccount(persistedEmail: "jerr@example.com", authAccountID: "jerr")
+        try container.persistAccounts([target])
+        let original = try container.writeLiveOAuthAuthFile(email: "serena@example.com", accountID: "serena")
+        let managed = try container.managedAuthData(for: target)
+        await #expect(throws: CodexAccountPromotionError.liveHomeNotShared) {
+            try await container.makeService(baseEnvironment: ["CODEX_HOME": target.managedHomePath])
+                .promoteManagedAccount(id: target.id)
+        }
+        #expect(try container.liveAuthData() == original)
+        #expect(try container.managedAuthData(for: target) == managed)
+    }
+
+    @Test(arguments: ["cli_auth_credentials_store = \"file\"", "'cli_auth_credentials_store' = 'file' # native"])
+    func `explicit native file storage supports shared promotion`(setting: String) async throws {
+        let container = try CodexAccountPromotionTestContainer(suiteName: "CodexPromotion-file-store")
+        defer { container.tearDown() }
+        let target = try container.createManagedAccount(persistedEmail: "jerr@example.com", authAccountID: "jerr")
+        try container.persistAccounts([target])
+        try setting.write(
+            to: container.liveHomeURL.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+        let result = try await container.makeService().promoteManagedAccount(id: target.id)
+        #expect(result.outcome == .promoted)
+        #expect(result.daemonRestartNote == nil)
+        #expect(try container.liveAuthData() == container.managedAuthData(for: target))
+    }
+
+    @Test
+    func `display selection and failed auth swap never invoke daemon`() async throws {
+        let container = try CodexAccountPromotionTestContainer(suiteName: "CodexPromotion-display-only")
+        defer { container.tearDown() }
+        let target = try container.createManagedAccount(persistedEmail: "jerr@example.com", authAccountID: "jerr")
+        try container.persistAccounts([target])
+        let original = try container.writeLiveOAuthAuthFile(email: "serena@example.com", accountID: "serena")
+        var probes = 0
+        let daemon = CodexAppServerDaemon(isAppServerProcess: { _ in probes += 1; return true }, run: { _, _ in
+            Issue.record("Must not invoke daemon for a failed swap")
+            return "{}"
+        })
+        let directory = container.liveHomeURL.appendingPathComponent("app-server-daemon")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(#"{"pid":42}"#.utf8).write(to: directory.appendingPathComponent("daemon.pid"))
+        container.settings.selectAuthenticatedManagedCodexAccount(target)
+        #expect(try container.liveAuthData() == original)
+        #expect(probes == 0)
+        let swapper = RecordingCodexLiveAuthSwapper { _, _ in throw PromotionTestError.unexpectedDisposition }
+        await #expect(throws: CodexAccountPromotionError.liveAuthSwapFailed) {
+            try await container.makeService(liveAuthSwapper: swapper, daemon: daemon)
+                .promoteManagedAccount(id: target.id)
+        }
+        #expect(probes == 0)
+        #expect(try container.liveAuthData() == original)
+    }
+
+    @Test
     func `happy path promotion swaps target auth into live home`() async throws {
         let container = try CodexAccountPromotionTestContainer(
             suiteName: "CodexAccountPromotionServiceTests-happy-path")
@@ -422,7 +540,8 @@ struct CodexAccountPromotionServiceTests {
             activeSourceWriter: SettingsStoreCodexActiveSourceWriter(settingsStore: container.settings),
             accountScopedRefresher: UsageStoreCodexAccountScopedRefresher(usageStore: container.usageStore),
             baseEnvironment: container.baseEnvironment,
-            fileManager: .default)
+            fileManager: .default,
+            sharedHomeURL: container.liveHomeURL)
 
         let result = try await service.promoteManagedAccount(id: target.id)
         let accounts = try container.loadAccounts().accounts

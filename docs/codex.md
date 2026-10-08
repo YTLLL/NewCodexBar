@@ -112,6 +112,9 @@ Usage source picker:
 - CLI PTY diagnostics can still parse `Credits:` from saved/manual `/status` output.
 
 ## Cost usage (local log scan)
+- CodexBar always scans this Mac's ambient/shared CLI history, regardless of the displayed managed account.
+  This is a cross-account local estimate, not that account's exact spend. Remote 5h/weekly quota and identity
+  probes still use each managed account's isolated home. Old managed-home history is not migrated automatically.
 - Source files:
   - Native Codex logs:
     - `~/.codex/sessions/YYYY/MM/DD/*.jsonl`

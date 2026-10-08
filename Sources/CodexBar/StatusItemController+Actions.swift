@@ -293,6 +293,8 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
             let result = await self.codexAccountPromotionCoordinator.promote(managedAccountID: managedAccountID)
             if case let .failure(error) = result {
                 self.presentLoginAlert(title: error.title, message: error.message)
+            } else if case let .success(promotion) = result, let note = promotion.daemonRestartNote {
+                self.presentLoginAlert(title: "Account switched", message: note)
             }
         }
     }
@@ -453,9 +455,6 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
 
             let shouldRefresh = await self.runLoginFlow(provider: provider)
             if shouldRefresh {
-                if provider == .codex {
-                    _ = CodexCLIShellIntegrationInstaller.installFromCurrentApp()
-                }
                 await ProviderInteractionContext.$current.withValue(.userInitiated) {
                     await self.store.refresh()
                 }

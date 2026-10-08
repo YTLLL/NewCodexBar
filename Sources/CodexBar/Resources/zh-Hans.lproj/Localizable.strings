@@ -507,7 +507,7 @@
 "open_menu_shortcut_title" = "打开菜单";
 "open_menu_shortcut_subtitle" = "从任意位置触发菜单栏菜单。";
 "install_cli" = "安装 CLI";
-"install_cli_subtitle" = "将 CodexBarCLI 作为 codexbar 安装，并让新启动的 Codex 命令使用所选账户的 home。";
+"install_cli_subtitle" = "将 CodexBarCLI 作为 codexbar 符号链接到 /usr/local/bin 和 /opt/homebrew/bin。";
 "cli_not_found" = "在应用包中未找到 CodexBarCLI。";
 "no_writable_bin_dirs" = "未找到可写的 bin 目录。";
 "show_debug_settings_title" = "显示调试设置";
@@ -1035,3 +1035,8 @@
 "Clear" = "清除";
 "No matching providers" = "没有匹配的提供商";
 "Search providers" = "搜索提供商";
+"This Mac: estimated from shared local Codex history, across accounts." = "本机历史：根据各账户共享的本地 Codex 会话估算。";
+"Account switched" = "账号已切换";
+"Account switched; restart the Codex background server manually when no tasks are running." = "账号已切换；请在无进行中任务时手动重启 Codex 后台服务。";
+"The current environment is not the shared Codex home (~/.codex). Restart CodexBar without a custom CODEX_HOME before switching the system account." = "当前环境不是共享 Home（~/.codex）。请取消自定义 CODEX_HOME 并重启 CodexBar，再切换本机账号。";
+"System account switching requires native Codex file credential storage. The configured keyring, auto, or ephemeral store is not supported; use a compatible native login before switching." = "本机账号切换需要原生 Codex 的文件凭据存储。当前配置的 keyring、auto 或 ephemeral 存储不受支持；请先使用兼容的原生登录方式。";
