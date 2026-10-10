@@ -1,5 +1,9 @@
 # System account switching without daemon restart — 2026-10-09
 
+Historical record for `c0c41075`. The subsequent
+[shell/RPC follow-up](codex-shell-rpc-validation-2026-10-09.md) fixes the RPC approval argument and restores
+conservative interactive-only shell flag injection, without restoring daemon restart or account Home routing.
+
 Base: `aaf3979b768d1b482d92cc636a2608b63905aad5`, verified against the fetched remote before editing.
 Delivery branch: `fix/native-codex-shared-home-20261008`. No merge, release, app deployment, shell cleanup,
 real account switch, history migration, database edits, daemon repair, or task termination in this delivery.

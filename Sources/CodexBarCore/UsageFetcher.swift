@@ -608,7 +608,7 @@ private final class CodexRPCClient: @unchecked Sendable {
 
     init(
         executable: String = "codex",
-        arguments: [String] = ["-s", "read-only", "-a", "untrusted", "app-server"],
+        arguments: [String] = ["-s", "read-only", "-a", "on-request", "app-server"],
         environment: [String: String] = ProcessInfo.processInfo.environment,
         initializeTimeoutSeconds: TimeInterval = 8.0,
         requestTimeoutSeconds: TimeInterval = 3.0,

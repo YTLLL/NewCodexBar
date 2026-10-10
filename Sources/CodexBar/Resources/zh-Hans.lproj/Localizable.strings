@@ -1037,6 +1037,6 @@
 "Search providers" = "搜索提供商";
 "This Mac: estimated from shared local Codex history, across accounts." = "本机历史：根据各账户共享的本地 Codex 会话估算。";
 "Account switched" = "账号已切换";
-"System Codex account switched. CodexBar will not restart existing background tasks; the background server may still use the previous account. To start or resume with the new account, use codex --no-daemon or codex resume --no-daemon <ID>." = "已切换系统 Codex 账号。现有后台任务不会由 CodexBar 重启；后台可能仍持有旧账号。要以新账号开始或恢复会话，请使用 codex --no-daemon 或 codex resume --no-daemon <ID>。";
+"System Codex account switched. CodexBar will not restart background tasks; the server may still use the previous account. Terminals loading the updated shell integration add --no-daemon to recognized interactive launches. Direct launches still need codex --no-daemon or codex resume --no-daemon <ID>." = "已切换系统 Codex 账号。CodexBar 不会重启后台任务；后台可能仍使用旧账号。只有加载新版 shell 集成的终端，才会为已识别的交互式命令自动添加 --no-daemon。直接调用仍需使用 codex --no-daemon 或 codex resume --no-daemon <ID>。";
 "The current environment is not the shared Codex home (~/.codex). Restart CodexBar without a custom CODEX_HOME before switching the system account." = "当前环境不是共享 Home（~/.codex）。请取消自定义 CODEX_HOME 并重启 CodexBar，再切换本机账号。";
 "System account switching requires native Codex file credential storage. The configured keyring, auto, or ephemeral store is not supported; use a compatible native login before switching." = "本机账号切换需要原生 Codex 的文件凭据存储。当前配置的 keyring、auto 或 ephemeral 存储不受支持；请先使用兼容的原生登录方式。";

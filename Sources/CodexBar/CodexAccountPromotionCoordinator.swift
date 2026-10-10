@@ -65,9 +65,10 @@ final class CodexAccountPromotionCoordinator {
         guard result.outcome == .promoted, result.didMutateLiveAuth, result.resultingActiveSource == .liveSystem
         else { return nil }
         return L(
-            "System Codex account switched. CodexBar will not restart existing background tasks; " +
-                "the background server may still use the previous account. " +
-                "To start or resume with the new account, use codex --no-daemon or codex resume --no-daemon <ID>.")
+            "System Codex account switched. CodexBar will not restart background tasks; " +
+                "the server may still use the previous account. " +
+                "Terminals loading the updated shell integration add --no-daemon to recognized interactive launches. " +
+                "Direct launches still need codex --no-daemon or codex resume --no-daemon <ID>.")
     }
 
     func setLiveReauthenticationInProgress(_ isInProgress: Bool) {

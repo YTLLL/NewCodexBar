@@ -448,6 +448,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppNotifications.shared.requestAuthorizationOnStartup()
+        _ = CodexCLIShellIntegrationInstaller.installFromCurrentApp()
         self.ensureStatusController()
         KeyboardShortcuts.onKeyUp(for: .openMenu) { [weak self] in
             Task { @MainActor [weak self] in

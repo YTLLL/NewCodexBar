@@ -5,6 +5,30 @@ import Testing
 @Suite(.serialized)
 struct CodexUsageFetcherFallbackTests {
     @Test
+    func `RPC launch uses supported approval flags and preserves account home`() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("codex-rpc-argv-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let stubCLIPath = try self.makePlanOnlyStubCodexCLI()
+        defer { try? FileManager.default.removeItem(atPath: stubCLIPath) }
+        let capture = root.appendingPathComponent("launch.json")
+        let fetcher = UsageFetcher(
+            environment: [
+                "CODEX_CLI_PATH": stubCLIPath,
+                "CODEX_HOME": root.path,
+                "CODEXBAR_TEST_RPC_CAPTURE": capture.path,
+            ],
+            initializeTimeoutSeconds: 20,
+            requestTimeoutSeconds: 3)
+
+        let result = try await fetcher.loadLatestCLIAccountSnapshot()
+        let launch = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: capture)) as? [String: Any])
+        #expect(launch["arguments"] as? [String] == ["-s", "read-only", "-a", "on-request", "app-server"])
+        #expect(launch["codexHome"] as? String == root.path)
+        #expect(result.usage?.accountEmail(for: .codex) == "stub@example.com")
+    }
+
+    @Test
     func `missing CLI binary reports install guidance instead of not running`() async throws {
         let fetcher = UsageFetcher(
             environment: [:],
@@ -364,9 +388,14 @@ struct CodexUsageFetcherFallbackTests {
         let script = """
         #!/usr/bin/python3 -S
         import json
+        import os
         import sys
 
         args = sys.argv[1:]
+        capture = os.environ.get("CODEXBAR_TEST_RPC_CAPTURE")
+        if capture:
+            with open(capture, "w") as output:
+                json.dump({"arguments": args, "codexHome": os.environ.get("CODEX_HOME")}, output)
         if "app-server" in args:
             for line in sys.stdin:
                 if not line.strip():

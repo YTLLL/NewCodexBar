@@ -7,6 +7,7 @@
 - Localization: add Ukrainian as a selectable app language (#1250). Thanks @Yuxin-Qiao!
 
 ### Fixed
+- Codex: use native-supported `on-request` approval for read-only quota RPC. Upgrade the original shell integration in place to add `--no-daemon` only for recognized interactive launches, without account-home routing or daemon restarts; leave management commands and ambiguous forms untouched.
 - Codex: switch System account credentials without restarting the shared daemon or intentionally interrupting its tasks. Show explicit native `--no-daemon` start/resume guidance only after a real switch; keep shared history, account-scoped remote usage, and this Mac's local cost scope unchanged.
 - Codex: let the menu remove a selected managed account, reliably open Settings, and replace an in-progress Add Account login with a fresh OAuth link.
 - Claude: remove transient ClaudeProbe session artifacts after CLI usage polls so background refreshes no longer fill Claude Code project history with CodexBar `/usage` sessions (#1301). Thanks @LPFchan and @matthewod11-stack!
