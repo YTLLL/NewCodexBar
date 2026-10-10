@@ -1,5 +1,11 @@
 # Shared-home implementation validation — 2026-10-08
 
+Historical record for the original shared-home delivery, not the current behavior or machine state.
+Its automatic daemon restart is removed by the
+[2026-10-09 follow-up](codex-live-session-no-restart-validation-2026-10-09.md).
+The shell, installed-app, and migration observations below describe the original inspection only; they
+must not be used to infer that the wrapper still exists or that history is still unmigrated today.
+
 Baseline: `origin/main@407457c9a9d5278406fe98a7a2976a5b2a2850e8`.
 Delivery branch: `fix/native-codex-shared-home-20261008`; no merge, release, or app deployment.
 

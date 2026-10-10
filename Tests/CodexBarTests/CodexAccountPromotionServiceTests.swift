@@ -7,39 +7,28 @@ import Testing
 @MainActor
 struct CodexAccountPromotionServiceTests {
     @Test
-    func `daemon failure preserves promotion and publishes a success notice once`() async throws {
-        let container = try CodexAccountPromotionTestContainer(suiteName: "CodexPromotion-daemon-failure")
+    func `system promotion preserves displaced auth refreshes usage and offers a notice only for a real switch`()
+        async throws
+    {
+        let container = try CodexAccountPromotionTestContainer(suiteName: "CodexPromotion-no-restart")
         defer { container.tearDown() }
         let target = try container.createManagedAccount(persistedEmail: "jerr@example.com", authAccountID: "jerr")
         try container.persistAccounts([target])
         let oldAuth = try container.writeLiveOAuthAuthFile(email: "serena@example.com", accountID: "serena")
-        let directory = container.liveHomeURL.appendingPathComponent("app-server-daemon")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try Data(#"{"pid":42}"#.utf8).write(to: directory.appendingPathComponent("daemon.pid"))
-        var calls: [String] = []
-        let daemon = CodexAppServerDaemon(isAppServerProcess: { $0 == 42 }, run: { command, env in
-            calls.append(command)
-            #expect(container.settings.codexActiveSource == .liveSystem)
-            #expect(try container.liveAuthData() == container.managedAuthData(for: target))
-            #expect(env["CODEX_HOME"] == container.liveHomeURL.resolvingSymlinksInPath().path)
-            if command == "restart" { throw SubprocessRunnerError.timedOut("synthetic restart") }
-            let socket = container.liveHomeURL.appendingPathComponent("app-server-control/app-server-control.sock")
-            let data = try JSONSerialization.data(withJSONObject: [
-                "status": "running", "backend": "pid", "socketPath": socket.path,
-            ])
-            return try #require(String(data: data, encoding: .utf8))
-        })
-        let coordinator = CodexAccountPromotionCoordinator(service: container.makeService(daemon: daemon))
+        let coordinator = CodexAccountPromotionCoordinator(service: container.makeService())
         let result = await coordinator.promote(managedAccountID: target.id)
         guard case let .success(promotion) = result else {
-            Issue.record("Daemon failure must not fail promotion")
+            Issue.record("Expected successful system promotion")
             return
         }
         #expect(promotion.outcome == .promoted)
-        #expect(promotion.daemonRestartNote == CodexAppServerDaemon.recoveryNote)
-        #expect(coordinator.daemonRestartNote == promotion.daemonRestartNote)
+        #expect(promotion.didMutateLiveAuth)
+        let notice = try #require(CodexAccountPromotionCoordinator.successNotice(for: promotion))
+        #expect(notice.contains("codex --no-daemon"))
+        #expect(notice.contains("codex resume --no-daemon <ID>"))
         #expect(coordinator.userFacingError == nil)
-        #expect(calls == ["version", "restart"])
+        #expect(container.settings.codexActiveSource == .liveSystem)
+        #expect(container.usageStore.snapshots[.codex]?.accountEmail(for: .codex) == "jerr@example.com")
         #expect(try container.liveAuthData() == container.managedAuthData(for: target))
         let preserved = try #require(container.loadAccounts().accounts.first { $0.email == "serena@example.com" })
         #expect(try container.managedAuthData(for: preserved) == oldAuth)
@@ -47,8 +36,8 @@ struct CodexAccountPromotionServiceTests {
         let repeated = await coordinator.promote(managedAccountID: target.id)
         guard case let .success(noOp) = repeated else { Issue.record("Expected idempotent promotion"); return }
         #expect(noOp.outcome == .convergedNoOp)
-        #expect(coordinator.daemonRestartNote == nil)
-        #expect(calls == ["version", "restart"])
+        #expect(!noOp.didMutateLiveAuth)
+        #expect(CodexAccountPromotionCoordinator.successNotice(for: noOp) == nil)
     }
 
     @Test(arguments: ["keyring", "auto", "ephemeral"])
@@ -93,34 +82,28 @@ struct CodexAccountPromotionServiceTests {
             to: container.liveHomeURL.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
         let result = try await container.makeService().promoteManagedAccount(id: target.id)
         #expect(result.outcome == .promoted)
-        #expect(result.daemonRestartNote == nil)
         #expect(try container.liveAuthData() == container.managedAuthData(for: target))
     }
 
     @Test
-    func `display selection and failed auth swap never invoke daemon`() async throws {
+    func `display selection and failed auth swap leave system auth unchanged`() async throws {
         let container = try CodexAccountPromotionTestContainer(suiteName: "CodexPromotion-display-only")
         defer { container.tearDown() }
         let target = try container.createManagedAccount(persistedEmail: "jerr@example.com", authAccountID: "jerr")
         try container.persistAccounts([target])
         let original = try container.writeLiveOAuthAuthFile(email: "serena@example.com", accountID: "serena")
-        var probes = 0
-        let daemon = CodexAppServerDaemon(isAppServerProcess: { _ in probes += 1; return true }, run: { _, _ in
-            Issue.record("Must not invoke daemon for a failed swap")
-            return "{}"
-        })
-        let directory = container.liveHomeURL.appendingPathComponent("app-server-daemon")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try Data(#"{"pid":42}"#.utf8).write(to: directory.appendingPathComponent("daemon.pid"))
         container.settings.selectAuthenticatedManagedCodexAccount(target)
         #expect(try container.liveAuthData() == original)
-        #expect(probes == 0)
         let swapper = RecordingCodexLiveAuthSwapper { _, _ in throw PromotionTestError.unexpectedDisposition }
-        await #expect(throws: CodexAccountPromotionError.liveAuthSwapFailed) {
-            try await container.makeService(liveAuthSwapper: swapper, daemon: daemon)
-                .promoteManagedAccount(id: target.id)
+        let coordinator = CodexAccountPromotionCoordinator(service: container.makeService(liveAuthSwapper: swapper))
+        let result = await coordinator.promote(managedAccountID: target.id)
+        guard case let .failure(error) = result else {
+            Issue.record("Expected failed auth swap, not a successful switch notice")
+            return
         }
-        #expect(probes == 0)
+        #expect(error == CodexAccountPromotionCoordinator
+            .mapUserFacingError(CodexAccountPromotionError.liveAuthSwapFailed))
+        #expect(coordinator.userFacingError == error)
         #expect(try container.liveAuthData() == original)
     }
 

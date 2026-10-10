@@ -293,7 +293,9 @@ extension StatusItemController: StatusItemMenuPersistentActionDelegate {
             let result = await self.codexAccountPromotionCoordinator.promote(managedAccountID: managedAccountID)
             if case let .failure(error) = result {
                 self.presentLoginAlert(title: error.title, message: error.message)
-            } else if case let .success(promotion) = result, let note = promotion.daemonRestartNote {
+            } else if case let .success(promotion) = result,
+                      let note = CodexAccountPromotionCoordinator.successNotice(for: promotion)
+            {
                 self.presentLoginAlert(title: "Account switched", message: note)
             }
         }

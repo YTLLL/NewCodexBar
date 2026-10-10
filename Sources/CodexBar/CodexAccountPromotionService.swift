@@ -131,7 +131,6 @@ struct CodexAccountPromotionResult: Equatable {
     let displacedLiveDisposition: DisplacedLiveDisposition
     let didMutateLiveAuth: Bool
     let resultingActiveSource: CodexActiveSource
-    var daemonRestartNote: String?
 }
 
 enum CodexAccountPromotionError: Error, Equatable {
@@ -163,7 +162,6 @@ final class CodexAccountPromotionService {
     private let baseEnvironment: [String: String]
     private let fileManager: FileManager
     private let sharedHomeURL: URL
-    private let daemon: CodexAppServerDaemon
 
     init(
         store: any ManagedCodexAccountStoring,
@@ -177,8 +175,7 @@ final class CodexAccountPromotionService {
         accountScopedRefresher: any CodexAccountScopedRefreshing,
         baseEnvironment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default,
-        sharedHomeURL: URL? = nil,
-        daemon: CodexAppServerDaemon = CodexAppServerDaemon())
+        sharedHomeURL: URL? = nil)
     {
         self.store = store
         self.homeFactory = homeFactory
@@ -193,7 +190,6 @@ final class CodexAccountPromotionService {
         self.fileManager = fileManager
         self.sharedHomeURL = sharedHomeURL ?? fileManager.homeDirectoryForCurrentUser
             .appendingPathComponent(".codex", isDirectory: true)
-        self.daemon = daemon
     }
 
     convenience init(
@@ -253,8 +249,6 @@ final class CodexAccountPromotionService {
         }
 
         self.activeSourceWriter.writeCodexActiveSource(.liveSystem)
-        let daemonRestartNote = await self.daemon.restartIfRunning(
-            homeURL: context.live.homeURL, environment: self.baseEnvironment)
         await self.accountScopedRefresher.refreshCodexAccountScopedState(allowDisabled: true)
 
         return CodexAccountPromotionResult(
@@ -262,8 +256,7 @@ final class CodexAccountPromotionService {
             outcome: .promoted,
             displacedLiveDisposition: executionResult.displacedLiveDisposition,
             didMutateLiveAuth: true,
-            resultingActiveSource: .liveSystem,
-            daemonRestartNote: daemonRestartNote)
+            resultingActiveSource: .liveSystem)
     }
 
     private func validateSharedLiveHome() throws {

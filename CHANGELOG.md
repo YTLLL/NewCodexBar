@@ -7,7 +7,7 @@
 - Localization: add Ukrainian as a selectable app language (#1250). Thanks @Yuxin-Qiao!
 
 ### Fixed
-- Codex: keep native CLI sessions in the shared home, scope daemon refresh to verified System account promotions, and report local cost as this Mac's shared history. Display-only account selection keeps remote usage isolated.
+- Codex: switch System account credentials without restarting the shared daemon or intentionally interrupting its tasks. Show explicit native `--no-daemon` start/resume guidance only after a real switch; keep shared history, account-scoped remote usage, and this Mac's local cost scope unchanged.
 - Codex: let the menu remove a selected managed account, reliably open Settings, and replace an in-progress Add Account login with a fresh OAuth link.
 - Claude: remove transient ClaudeProbe session artifacts after CLI usage polls so background refreshes no longer fill Claude Code project history with CodexBar `/usage` sessions (#1301). Thanks @LPFchan and @matthewod11-stack!
 - Menu bar: keep z.ai overview rows with detail submenus in Overview so hovering quota details no longer recurses into a nested provider menu (#1279, fixes #1246). Thanks @RajvardhanPatil07!

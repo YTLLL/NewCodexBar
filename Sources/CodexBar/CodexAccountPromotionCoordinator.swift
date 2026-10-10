@@ -14,7 +14,6 @@ final class CodexAccountPromotionCoordinator {
     private(set) var isAuthenticatingLiveAccount = false
     private(set) var isPromotingSystemAccount = false
     private(set) var userFacingError: CodexSystemAccountPromotionUserFacingError?
-    private(set) var daemonRestartNote: String?
 
     init(
         service: CodexAccountPromotionService,
@@ -38,7 +37,6 @@ final class CodexAccountPromotionCoordinator {
         async -> Result<CodexAccountPromotionResult, CodexSystemAccountPromotionUserFacingError>
     {
         self.userFacingError = nil
-        self.daemonRestartNote = nil
 
         guard !self.isInteractionBlocked() else {
             let error = Self.interactionBlockedError()
@@ -51,7 +49,6 @@ final class CodexAccountPromotionCoordinator {
 
         do {
             let result = try await self.service.promoteManagedAccount(id: managedAccountID)
-            self.daemonRestartNote = result.daemonRestartNote
             return .success(result)
         } catch {
             let mapped = Self.mapUserFacingError(error)
@@ -62,6 +59,15 @@ final class CodexAccountPromotionCoordinator {
 
     func clearError() {
         self.userFacingError = nil
+    }
+
+    static func successNotice(for result: CodexAccountPromotionResult) -> String? {
+        guard result.outcome == .promoted, result.didMutateLiveAuth, result.resultingActiveSource == .liveSystem
+        else { return nil }
+        return L(
+            "System Codex account switched. CodexBar will not restart existing background tasks; " +
+                "the background server may still use the previous account. " +
+                "To start or resume with the new account, use codex --no-daemon or codex resume --no-daemon <ID>.")
     }
 
     func setLiveReauthenticationInProgress(_ isInProgress: Bool) {
